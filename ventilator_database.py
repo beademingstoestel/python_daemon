@@ -43,8 +43,8 @@ class DbClient():
         except errors.ConnectionFailure:
             print("Lost connection, client will attempt to reconnect")
 
-    def last_n_data(self, N, type_data):
-        # B        
+    def last_n_data(self, type_data, N=100):
+        # retrieve the last "N" added measurement 
         if type_data == 'BPM':
             return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'VOL':
@@ -55,7 +55,28 @@ class DbClient():
             return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            return None
 
+    def last_n_values(self, type_data, N=100):
+        # retrieve the last "N" added measurement 
+        collection, data_raw, values = [], None, []
+        if type_data == 'BPM':
+            collection = self.db.breathsperminute_values
+        elif type_data == 'VOL':
+            collection = self.db.volume_values
+        elif type_data == 'TRIG':
+            collection = self.db.trigger_values
+        elif type_data == 'PRES':
+            collection = self.db.pressure_values
+        else:
+            print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            return None, None
+        # send back data raw format + time stamp
+        data_raw = collection.find().sort("loggedAt", -1).limit(N)
+        for x in (collection.find({},{ "loggedAt": 0 ,"_id": 0})).sort("loggedAt", -1).limit(100): 
+            values.append(x.get('value'))
+        return data_raw, values
+        
     def run(self, name):
         print("Starting {}".format(name))
         # Only start MongoClient after fork()
@@ -63,7 +84,7 @@ class DbClient():
             self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
             print("Unable to connect, client will attempt to reconnect")
-
+        
         self.db = self.client.beademing
         while True:
             try:
