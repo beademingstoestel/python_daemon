@@ -4,6 +4,7 @@ import json
 import asyncio
 import websockets
 import ventilator_protocol as proto
+from ventilator_sound import SoundPlayer
 
 
 class WebsocketHandler():
@@ -22,6 +23,16 @@ class WebsocketHandler():
             if key in settings:
                 print("send setting {}".format(key))
                 self.serial_queue.put({'type': key, 'val': settings[key]})
+
+                if key == 'ACTIVE' and settings[key] == 1:
+                    # user wants to turn on the machine, play beep for confirmation
+                    print('play beep')
+                    if self.sound_player.is_alive():
+                        self.sound_player.terminate()
+                        self.sound_player.join()
+
+                    self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
+                    self.sound_player.start()
 
     def subscribe(self, path):
         """
@@ -48,6 +59,8 @@ class WebsocketHandler():
 
         self.do_handshake()
         self.subscribe('settings')
+
+        self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
 
         while True:
             json_msg = self.ws.recv()
