@@ -8,6 +8,6 @@ trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 socat -d -d PTY,raw,echo=0,link=/tmp/ttySIM1 PTY,raw,echo=0,link=/tmp/ttySIM2 &
 
-../daemon.py /tmp/ttySIM2 &
+python3 ../daemon.py /tmp/ttySIM2 &
 
-./dummyPrint.py /tmp/ttySIM1
+python3 ./dummyPrint.py /tmp/ttySIM1

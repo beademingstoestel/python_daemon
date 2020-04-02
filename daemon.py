@@ -20,6 +20,7 @@ from ventilator_alarm import AlarmHandler
 
 from ventilator_request import APIRequest
 from ventilator_request_handler import RequestHandler
+from ventilator_setting_handler import SettingHandler
 from datetime import datetime
 
 
@@ -39,14 +40,18 @@ def run():
     alarm_input_queue = mp.Queue() # Queue for values for Alarm thread
     request_queue = mp.Queue() # Queue with the requests to be sent to the API
 
+    manager = mp.Manager()
+    settings = manager.dict()
+
     if userport:
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue, port = userport)
     else:
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue)
     db_handler = DbClient(db_queue)
     websocket_handler = WebsocketHandler(serial_output_queue)
-    alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue)
+    alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue, settings)
     request_handler = RequestHandler(api_request, request_queue)
+    setting_handler = SettingHandler(serial_output_queue, settings) #all settings comes at least from the websocket
 
     # Thread that handles bidirectional communication
     ser_thread = mp.Process(target=ser_handler.run,
@@ -73,12 +78,17 @@ def run():
                                     daemon=True,
                                     args=('request thread',))
 
+    # Thread that stores the settings
+    setting_thread = mp.Process(target=setting_handler.run,
+                                    daemon=True,
+                                    args=('setting thread',))
 
     ser_thread.start()
     db_thread.start()
     websocket_thread.start()
     alarm_thread.start()
     request_thread.start()
+    setting_thread.start()
 
 
     while True:
@@ -87,7 +97,8 @@ def run():
             or db_thread.is_alive() == False
             or websocket_thread.is_alive() == False
             or alarm_thread.is_alive() == False
-            or request_thread.is_alive() == False):
+            or request_thread.is_alive() == False
+            or setting_thread.is_alive() == False):
                 break
 
         time.sleep(0.1)
@@ -99,6 +110,7 @@ def run():
     websocket_thread.kill()
     alarm_thread.kill()
     request_thread.kill()
+    setting_thread.kill()
 
     # Then join before exiting
     ser_thread.join()
@@ -106,6 +118,7 @@ def run():
     websocket_thread.join()
     alarm_thread.join()
     request_thread.join()
+    setting_thread.join()
 
 if __name__ == "__main__":
     run()
