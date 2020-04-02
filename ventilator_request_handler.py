@@ -1,4 +1,5 @@
 import queue
+import time
 
 class RequestHandler:
     def __init__(self, api_client, request_queue):
@@ -22,3 +23,5 @@ class RequestHandler:
                         self.api_client.send_error(msg['value'])
                 except:
                     print("Invalid message from request")
+
+            time.sleep(0.01)
