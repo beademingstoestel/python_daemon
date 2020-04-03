@@ -13,14 +13,6 @@ class DbClient():
         self.db = None
         self.queue = db_queue
 
-        # Only start MongoClient after fork()
-        try:
-            self.client = MongoClient(self.addr)
-        except errors.ConnectionFailure:
-            print("Unable to connect, client will attempt to reconnect")
-
-        self.db = self.client.beademing
-
     def store_pressure(self, pressure_val):
         collection = self.db.pressure_values
         print('store_pressure')
@@ -61,10 +53,7 @@ class DbClient():
         elif type_data == 'TRIG':
             return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'PRES':
-            # import pdb
-            # pdb.set_trace()
-            collection = self.db.pressure_values
-            return collection.find().sort("loggedAt", -1).limit(N)
+            return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None
@@ -93,17 +82,13 @@ class DbClient():
     def run(self, name):
         print("Starting {}".format(name))
 
+        # Only start MongoClient after fork()
+        try:
+            self.client = MongoClient(self.addr)
+        except errors.ConnectionFailure:
+            print("Unable to connect, client will attempt to reconnect")
 
-
-        #collection = self.db.pressure_values
-        #cnt = collection.find().count()
-        #raw_data = self.last_n_data('PRES')
-        # f = raw_data.find({},{ "_id": 0})
-        #for x in (raw_data):
-        #    print('ok')
-        #    #    val = x.get('value')
-
-        #print("cnt pres values %d" % collection.find().count())
+        self.db = self.client.beademing
 
         while True:
             try:
