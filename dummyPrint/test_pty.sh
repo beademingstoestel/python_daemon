@@ -10,4 +10,6 @@ socat -d -d PTY,raw,echo=0,link=/tmp/ttySIM1 PTY,raw,echo=0,link=/tmp/ttySIM2 &
 
 python3 ../daemon.py /tmp/ttySIM2 &
 
-python3 ./dummyPrint.py /tmp/ttySIM1
+#python3 ./dummyPrint.py /tmp/ttySIM1
+python3 dummyPrint_from_file.py /tmp/ttySIM1
+
