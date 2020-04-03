@@ -24,7 +24,8 @@ Notes
     * param defaults values were chosen when anyalisng the data recorded on the 02/04/2020
 """
 
-class PressureMonitor():
+
+class PressureMonitor:
     def __init__(self, raw_data, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
@@ -33,7 +34,8 @@ class PressureMonitor():
         for x in (raw_data):
             self.pvalues.append(float(x.get('value')))
             full_time = x.get('loggedAt')
-            tmp = (float(full_time.time().hour)*3600+float(full_time.time().minute)*60+float(full_time.time().second))*1e3+float(full_time.time().microsecond)/1e3
+            tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
+                full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
             self.timestamp.append(tmp)
 
         # reverse the order of the element because they are retrieved 
@@ -46,9 +48,9 @@ class PressureMonitor():
         pvalues_filtered = signal.medfilt(self.pvalues, median_kernel_size)
         # compute the first derivative of the pressure signal
         d_pressure = np.zeros(pvalues_filtered.shape, np.float)
-        d_pressure[0:-1] = np.diff(pvalues_filtered)/(np.diff(self.timestamp)*1e-3)
-        d_pressure[-1] = (pvalues_filtered[-1] - pvalues_filtered[-2])/(self.timestamp[-1] - self.timestamp[-2])
-        
+        d_pressure[0:-1] = np.diff(pvalues_filtered) / (np.diff(self.timestamp) * 1e-3)
+        d_pressure[-1] = (pvalues_filtered[-1] - pvalues_filtered[-2]) / (self.timestamp[-1] - self.timestamp[-2])
+
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
         # TODO h/d value could be defined as parameters to read from the config file!!
         # TODO check if we need to adjust the distance between peaks
@@ -61,29 +63,30 @@ class PressureMonitor():
         # should start with peak_positive and end with one as well
         try:
             start_pp = self.ppeaks[0]
-            end_pp   = self.ppeaks[-1]
+            end_pp = self.ppeaks[-1]
+            # keep the falling edge in between
+            self.npeaks = self.npeaks[self.npeaks > start_pp]
+            self.npeaks = self.npeaks[self.npeaks < end_pp]
         except:
-            print('error') #todo send alarm here too
-
-        # keep the falling edge in between
-        self.npeaks = self.npeaks[self.npeaks>start_pp]
-        self.npeaks = self.npeaks[self.npeaks<end_pp]
+            raise Exception('no valid data or peaks detected')
 
     # get the BPM
-    def get_nbr_bpm(self): 
+    def get_nbr_bpm(self):
         # number of breathing cycle
         # -1 : to garantee that we have a complete one at the end
-        number_of_breathing_cycle = len(self.ppeaks)-1
+        number_of_breathing_cycle = len(self.ppeaks) - 1
         print("[INFO] The nummber of breathing cycle = {}".format(number_of_breathing_cycle))
         # time of all the breathing cycles loaded from the mongo database (seconds)
-        dtime_all_breathing_cycle = np.diff(self.timestamp[self.ppeaks])*1e-3
-        print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".foramt(dtime_all_breathing_cycle))
+        dtime_all_breathing_cycle = np.diff(self.timestamp[self.ppeaks]) * 1e-3
+        print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".foramt(
+            dtime_all_breathing_cycle))
         # average time of the last # breathing cycle (Ti + Te)
         average_dtime_breathing_cycle = np.mean(dtime_all_breathing_cycle)
-        print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(average_dtime_breathing_cycle))
+        print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(
+            average_dtime_breathing_cycle))
         # compute the BPM from the data analyzed
-        total_time_seconds = (self.timestamp[self.ppeaks[-1]]-self.timestamp[self.ppeaks[0]])/1e3
-        breathing_cycle_per_minute = 60*number_of_breathing_cycle/total_time_seconds
+        total_time_seconds = (self.timestamp[self.ppeaks[-1]] - self.timestamp[self.ppeaks[0]]) / 1e3
+        breathing_cycle_per_minute = 60 * number_of_breathing_cycle / total_time_seconds
         #  send back the following values!
         return breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle
 
@@ -92,12 +95,12 @@ class PressureMonitor():
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
         all_peaks = np.sort(all_peaks)
-        dtime_inhale_exhale = np.diff(self.timestamp[all_peaks])*1e-3
+        dtime_inhale_exhale = np.diff(self.timestamp[all_peaks]) * 1e-3
         # extract the dt for inhale and exhale
         dtime_inhale = dtime_inhale_exhale[0::2]
         dtime_exhale = dtime_inhale_exhale[1::2]
         # compute the ratio exhale/inhale ~ 3 
-        ratio_exhale_inhale = dtime_exhale/dtime_inhale
+        ratio_exhale_inhale = dtime_exhale / dtime_inhale
         # nbr of time the ratio is below the predfined threshold
         nbr_ratio_below_threshold = sum(float(num) <= threshold_ratio_ie for num in ratio_exhale_inhale)
         # nbr of time inhale or exhale duration is above the the threshold dt
@@ -108,7 +111,7 @@ class PressureMonitor():
 
     # TODO check from where we can get the values of the desired pressure, threshold and nbr data point for this function
     # nbr_data_point from falling edge and going back
-    def check_pressure_tracking_performance(self, pressure_desired = 51, threshold_dp = 3, nbr_data_point = 5):
+    def check_pressure_tracking_performance(self, pressure_desired=51, threshold_dp=3, nbr_data_point=5):
         """
         data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
         we will have during this period 15 data points
@@ -118,7 +121,7 @@ class PressureMonitor():
         # measure the absolute differentce to the desired pressure and then take the average of the n measures
         dp_list = []
         for indice_bc in self.npeaks:
-            dp = abs(self.pvalues[indice_bc-nbr_data_point:indice_bc] - pressure_desired)
+            dp = abs(self.pvalues[indice_bc - nbr_data_point:indice_bc] - pressure_desired)
             dp_list.append(np.mean(dp))
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_dp_above_threshold = sum(float(num) >= threshold_dp for num in dp_list)
@@ -127,7 +130,7 @@ class PressureMonitor():
 
     # TODO check from where we can get the values of the peep_value, threshold and nbr data point for this function
     # nbr_data_point from rising edge and going back
-    def detect_pressure_below_peep(self, peep_value = 10, threshold_dp_peep = 5, nbr_data_point = 35):
+    def detect_pressure_below_peep(self, peep_value=10, threshold_dp_peep=5, nbr_data_point=35):
         """
         data are saved every ~0.05s as an exhale state in average ~ 2.50second (from recorded data 02/04/2020)
         we will have during this period 50 data points
@@ -137,8 +140,8 @@ class PressureMonitor():
         # measure the absolute differentce to the desired pressure and then take the average of the n measure
         below_peep_list = []
         for indice_bc in self.ppeaks[1:]:
-            dp = self.pvalues[indice_bc-nbr_data_point:indice_bc] - peep_value
-            dp[dp>0]=0
+            dp = self.pvalues[indice_bc - nbr_data_point:indice_bc] - peep_value
+            dp[dp > 0] = 0
             below_peep_list.append(abs(min(dp)))
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_dp_peep_above_threshold = sum(float(num) >= threshold_dp_peep for num in below_peep_list)
@@ -147,7 +150,7 @@ class PressureMonitor():
 
     # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
     # nbr_data_from rising edge and going forward
-    def pressure_peak_overshoot(self, pressure_desired = 51, threshold_dp_overshoot = 3, nbr_data_point = 10):
+    def pressure_peak_overshoot(self, pressure_desired=51, threshold_dp_overshoot=3, nbr_data_point=10):
         """
         data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
         we will have during this period 15 data points
@@ -156,35 +159,26 @@ class PressureMonitor():
         """
         overshoot_pressure_list = []
         for indice_bc in self.ppeaks:
-            dp = self.pvalues[indice_bc:indice_bc+nbr_data_point] - pressure_desired
+            dp = self.pvalues[indice_bc:indice_bc + nbr_data_point] - pressure_desired
             overshoot_pressure_list.append((max(dp)))
         # nbr of time inhale or exhale duration is above the the threshold dt
-        nbr_pressure_overshoot_above_threshold = sum(float(num) >= threshold_dp_overshoot for num in overshoot_pressure_list)
+        nbr_pressure_overshoot_above_threshold = sum(
+            float(num) >= threshold_dp_overshoot for num in overshoot_pressure_list)
         # return
         return nbr_pressure_overshoot_above_threshold, overshoot_pressure_list
 
     # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
         if abs(sign) == 1:
-            peaks, _ = find_peaks(sign*signal_x, height=h, distance=d)
+            peaks, _ = find_peaks(sign * signal_x, height=h, distance=d)
         else:
             peaks = None
             print("[WARNING] sign should be either +1 or -1")
         # send back teh peaks found
         return peaks
 
-    
-    # TODO How to call the function and get the correct parametersa!!
-    def run(self):
-        """
-        @ question to Tom/Erwin
-            * do we run the above functions here and then send the alarms!
-            or do we call the functions from outside and set the alarm there!!!
-            or run everything when the object is created in init ???
-        """
-        pass
 
-class DatabaseProcessing():
+class DatabaseProcessing:
     def __init__(self, settings, db_handler, alarm_queue):
         self.settings = settings
         self.db_handler = db_handler
@@ -196,22 +190,15 @@ class DatabaseProcessing():
         while True:
             try:
                 data = self.db_handler.last_n_data('PRES')
-                pressureMonitor = PressureMonitor(data)
-                breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressureMonitor.get_nbr_bpm()
-                if breathing_cycle_per_minute > 0: #self.settings['IE']:
+                pressure_monitor = PressureMonitor(data)
+                breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
+                if breathing_cycle_per_minute > 0:  # self.settings['IE']:
                     print("breathing at %d" % breathing_cycle_per_minute)
-                    self.alarm_bits = 1 #frank will define these
+                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
-                time.sleep(0.5)
                 print("processing ", self.settings)
-            except:
-                print('error occurred')
+            except Exception as inst:
+                print('Exception occurred: ', inst)
+                self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
-
-
-
-
-
-
-
-
+            time.sleep(0.5)
