@@ -76,13 +76,11 @@ class PressureMonitor:
         number_of_breathing_cycle = len(self.ppeaks) - 1
         print("[INFO] The nummber of breathing cycle = {}".format(number_of_breathing_cycle))
         # time of all the breathing cycles loaded from the mongo database (seconds)
-        dtime_all_breathing_cycle = np.diff(self.timestamp[self.ppeaks]) * 1e-3
-        print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".foramt(
-            dtime_all_breathing_cycle))
+        dtime_all_breathing_cycle =  np.diff(np.array(self.timestamp)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[self.ppeaks]) * 1e-3
+        print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".format(dtime_all_breathing_cycle))
         # average time of the last # breathing cycle (Ti + Te)
         average_dtime_breathing_cycle = np.mean(dtime_all_breathing_cycle)
-        print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(
-            average_dtime_breathing_cycle))
+        print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(average_dtime_breathing_cycle))
         # compute the BPM from the data analyzed
         total_time_seconds = (self.timestamp[self.ppeaks[-1]] - self.timestamp[self.ppeaks[0]]) / 1e3
         breathing_cycle_per_minute = 60 * number_of_breathing_cycle / total_time_seconds
@@ -94,7 +92,7 @@ class PressureMonitor:
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
         all_peaks = np.sort(all_peaks)
-        dtime_inhale_exhale = np.diff(self.timestamp[all_peaks]) * 1e-3
+        dtime_inhale_exhale = np.diff(np.array(self.timestamp)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[all_peaks]) * 1e-3
         # extract the dt for inhale and exhale
         dtime_inhale = dtime_inhale_exhale[0::2]
         dtime_exhale = dtime_inhale_exhale[1::2]
@@ -120,7 +118,7 @@ class PressureMonitor:
         # measure the absolute differentce to the desired pressure and then take the average of the n measures
         dp_list = []
         for indice_bc in self.npeaks:
-            dp = abs(self.pvalues[indice_bc - nbr_data_point:indice_bc] - pressure_desired)
+            dp = abs(np.array(self.pvalues[indice_bc - nbr_data_point:indice_bc]) - pressure_desired)
             dp_list.append(np.mean(dp))
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_dp_above_threshold = sum(float(num) >= threshold_dp for num in dp_list)
@@ -139,7 +137,7 @@ class PressureMonitor:
         # measure the absolute differentce to the desired pressure and then take the average of the n measure
         below_peep_list = []
         for indice_bc in self.ppeaks[1:]:
-            dp = self.pvalues[indice_bc - nbr_data_point:indice_bc] - peep_value
+            dp = np.array(self.pvalues[indice_bc - nbr_data_point:indice_bc]) - peep_value
             dp[dp > 0] = 0
             below_peep_list.append(abs(min(dp)))
         # nbr of time inhale or exhale duration is above the the threshold dt
@@ -158,7 +156,7 @@ class PressureMonitor:
         """
         overshoot_pressure_list = []
         for indice_bc in self.ppeaks:
-            dp = self.pvalues[indice_bc:indice_bc + nbr_data_point] - pressure_desired
+            dp = np.array(self.pvalues[indice_bc:indice_bc + nbr_data_point]) - pressure_desired
             overshoot_pressure_list.append((max(dp)))
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_pressure_overshoot_above_threshold = sum(
@@ -251,53 +249,53 @@ class DatabaseProcessing:
                 
                 # Respiratory rate (RR) and Breath Trigger Threshold (TS)
                 # in the function definition used as default values 2.75 / 10s
-                nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['RR'], 
+                nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['RR'],
                                                                                                                 threshold_dt_ie=self.settings['TS'])
                 if nbr_ratio_BT > 0:
                     print("[INFO] Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 if nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
-                    print("[INFO] Breath Trigger Threshold (TS) : {} ".foramt(nbr_dtinhale_AT))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    print("[INFO] Breath Trigger Threshold (TS) : {} ".format(nbr_dtinhale_AT))
+                    self.alarm_bits = self.alarm_bits | int('00000100', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
                 
                 # Pressure performance Tracking -- Peak Pressure PK and ADPP Allowed deviation Peak Pressure
                 # in the function defaults values are 51 / 3 / (5 for data points)
-                nbr_dp_AT, dp_list = pressure_monitor.check_pressure_tracking_performance(pressure_desired=self.settings['PK'], 
+                nbr_dp_AT, dp_list = pressure_monitor.check_pressure_tracking_performance(pressure_desired=self.settings['PK'],
                                                                         threshold_dp=self.settings['ADPK'],
                                                                         nbr_data_point=5)
                 if nbr_dp_AT > 0:
-                    print("[INFO] Pressure tracking performance deviate {}".foramt(nbr_dp_AT))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    print("[INFO] Pressure tracking performance deviate {}".format(nbr_dp_AT))
+                    self.alarm_bits = self.alarm_bits | int('00001000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 # Pressure below peep value 'PP', # PEEP (positive end expiratory pressure) # 'ADPP', # Allowed deviation PEEP
                 # in the function defaults values are 10/5
-                nbr_dp_peep_AT, below_peep_list = pressure_monitor.detect_pressure_below_peep(peep_value=self.settings['PP'], 
-                                                                                            threshold_dp_peep=self.settings['ADPK'], 
+                nbr_dp_peep_AT, below_peep_list = pressure_monitor.detect_pressure_below_peep(peep_value=self.settings['PP'],
+                                                                                            threshold_dp_peep=self.settings['ADPK'],
                                                                                             nbr_data_point=35)
                 if nbr_dp_peep_AT > 0:
                     print("[INFO] Pressure below peep level detected {}".format(nbr_dp_peep_AT))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | int('00010000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
-                # Detect when the pressure_peak_overshoot 
-                # default values are 51 / 3 
-                nbr_pressure_overshoot_AT, overshoot_pressure_list = pressure_monitor.pressure_peak_overshoot(pressure_desired=self.settings['PK'], 
-                                                                                                            threshold_dp_overshoot=self.settings['ADPK'], 
+                # Detect when the pressure_peak_overshoot
+                # default values are 51 / 3
+                nbr_pressure_overshoot_AT, overshoot_pressure_list = pressure_monitor.pressure_peak_overshoot(pressure_desired=self.settings['PK'],
+                                                                                                            threshold_dp_overshoot=self.settings['ADPK'],
                                                                                                             nbr_data_point=10)
                 if nbr_pressure_overshoot_AT > 0:
                     print("[INFO] Pressure peak overshoot {}".format(nbr_pressure_overshoot_AT))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 print("processing ", self.settings)
 
             except Exception as inst:
                 print('Exception occurred: ', inst)
-                self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
+                self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
                 self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
             time.sleep(0.5)
