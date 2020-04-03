@@ -74,7 +74,7 @@ class PressureMonitor:
         # number of breathing cycle
         # -1 : to garantee that we have a complete one at the end
         number_of_breathing_cycle = len(self.ppeaks) - 1
-        print("[INFO] The nummber of breathing cycle = {}".format(number_of_breathing_cycle))
+        print("[INFO] The number of breathing cycle = {}".format(number_of_breathing_cycle))
         # time of all the breathing cycles loaded from the mongo database (seconds)
         dtime_all_breathing_cycle =  np.diff(np.array(self.timestamp)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[self.ppeaks]) * 1e-3
         print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".format(dtime_all_breathing_cycle))
