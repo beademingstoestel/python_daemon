@@ -5,7 +5,7 @@ import ventilator_protocol as proto
 
 class AlarmHandler():
 
-    def __init__(self, input_queue, serial_queue, request_queue, settings):
+    def __init__(self, input_queue, serial_queue, request_queue):
         """
         Alarm Handler constructor
 
@@ -16,7 +16,6 @@ class AlarmHandler():
         self.input_queue = input_queue
         self.serial_queue = serial_queue
         self.request_queue = request_queue
-        self.settings = settings
 
         self.alarm_val = 0
 
@@ -27,7 +26,6 @@ class AlarmHandler():
 
         self.first_watchdog_kick_received = False
         self.start_time = 0
-
 
     def run(self, name):
         print("Starting {}".format(name))
@@ -65,6 +63,4 @@ class AlarmHandler():
             if not self.first_watchdog_kick_received and ((cur_time - self.start_time) > 30):
                 #TODO: Raise watchdog timeout alarm.
                 pass
-
-            #print("alarm ", self.settings)
 

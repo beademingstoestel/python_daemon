@@ -21,8 +21,8 @@ from ventilator_alarm import AlarmHandler
 from ventilator_request import APIRequest
 from ventilator_request_handler import RequestHandler
 from ventilator_setting_handler import SettingHandler
+from database_processing import DatabaseProcessing
 from datetime import datetime
-
 
 def run():
     """
@@ -49,9 +49,11 @@ def run():
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue)
     db_handler = DbClient(db_queue)
     websocket_handler = WebsocketHandler(serial_output_queue)
-    alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue, settings)
+    alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue)
     request_handler = RequestHandler(api_request, request_queue)
     setting_handler = SettingHandler(serial_output_queue, settings) #all settings comes at least from the websocket
+
+    database_processing = DatabaseProcessing(settings, alarm_input_queue)
 
     # Thread that handles bidirectional communication
     ser_thread = mp.Process(target=ser_handler.run,
@@ -83,13 +85,18 @@ def run():
                                     daemon=True,
                                     args=('setting thread',))
 
+    # Thread that stores the settings
+    processing_thread = mp.Process(target=database_processing.run,
+                                    daemon=True,
+                                    args=('processing thread',))
+
     ser_thread.start()
     db_thread.start()
     websocket_thread.start()
     alarm_thread.start()
     request_thread.start()
     setting_thread.start()
-
+    processing_thread.start()
 
     while True:
         # check if all subprocesses are running
@@ -98,7 +105,8 @@ def run():
             or websocket_thread.is_alive() == False
             or alarm_thread.is_alive() == False
             or request_thread.is_alive() == False
-            or setting_thread.is_alive() == False):
+            or setting_thread.is_alive() == False
+            or processing_thread.is_alive() == False):
                 break
 
         time.sleep(0.1)
@@ -111,6 +119,7 @@ def run():
     alarm_thread.kill()
     request_thread.kill()
     setting_thread.kill()
+    processing_thread.kill()
 
     # Then join before exiting
     ser_thread.join()
@@ -119,6 +128,7 @@ def run():
     alarm_thread.join()
     request_thread.join()
     setting_thread.join()
+    processing_thread.join()
 
 if __name__ == "__main__":
     run()

@@ -4,7 +4,7 @@ from datetime import datetime, date, time, timedelta
 import scipy.signal as signal
 from scipy.signal import find_peaks
 import scipy
-
+import time
 
 """
 This class get the recorded pressure values and compute the following:
@@ -178,7 +178,20 @@ class PressureMonitor():
         """
         pass
 
+class DatabaseProcessing():
+    def __init__(self, settings, alarm_queue):
+        self.settings = settings
 
+    def run(self, name):
+        print("Starting {}".format(name))
+        while True:
+            #read
+            data = ""
+            pressureMonitor = PressureMonitor(data)
+            breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressureMonitor.get_nbr_bpm()
+            if breathing_cycle_per_minute < self.settings['IE']:
+            time.sleep(0.5)
+            print("processing ", self.settings)
 
 
 
