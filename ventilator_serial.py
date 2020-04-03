@@ -11,7 +11,7 @@ import traceback
 
 class SerialHandler():
 
-    def __init__(self, db_queue, request_queue, out_queue, alarm_queue, port='COM8', baudrate=115200):
+    def __init__(self, db_queue, request_queue, out_queue, alarm_queue, port='/dev/ventilator', baudrate=115200):
         self.port = port
         self.baudrate = baudrate
         self.ser = None
