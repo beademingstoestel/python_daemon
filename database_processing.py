@@ -187,6 +187,17 @@ class DatabaseProcessing:
 
     def run(self, name):
         print("Starting {}".format(name))
+
+        #temp solution because the mongo-client initialisation is not available ssince it is created by the ventilor_database (multiprocessing issue, need a proxy)
+        # Only start MongoClient after fork()
+        from pymongo import MongoClient, errors
+        try:
+            self.client = MongoClient(self.db_handler.addr)
+        except errors.ConnectionFailure:
+            print("Unable to connect, client will attempt to reconnect")
+
+        self.db_handler.db = self.client.beademing
+
         while True:
             try:
                 data = self.db_handler.last_n_data('PRES')
@@ -256,6 +267,7 @@ settings = [
 
             except Exception as inst:
                 print('Exception occurred: ', inst)
+                self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
                 self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
             time.sleep(0.5)

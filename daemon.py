@@ -100,7 +100,8 @@ def run():
 
     while True:
         # check if all subprocesses are running
-        if (db_thread.is_alive() == False
+        if (ser_thread.is_alive() == False
+            or db_thread.is_alive() == False
             or websocket_thread.is_alive() == False
             or alarm_thread.is_alive() == False
             or request_thread.is_alive() == False

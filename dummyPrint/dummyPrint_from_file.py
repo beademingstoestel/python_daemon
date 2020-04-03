@@ -53,9 +53,9 @@ def dummyPrint_from_file(device):
     # focus only on the useful part of the data
     xtime = np.array(timestamp[start:stop])
     y = np.array(values[start:stop])
-    plt.plot(xtime,y)
-    plt.grid(True)
-    plt.show()
+    #plt.plot(xtime,y)
+    #plt.grid(True)
+    #plt.show()
 
     values = values[start:stop]
     timestamp = timestamp[start:stop]
