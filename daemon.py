@@ -49,11 +49,11 @@ def run():
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue)
     db_handler = DbClient(db_queue)
     websocket_handler = WebsocketHandler(serial_output_queue)
-    alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue)
+    alarm_handler = AlarmHandler(alarm_input_queue, serial_output_queue, request_queue)
     request_handler = RequestHandler(api_request, request_queue)
     setting_handler = SettingHandler(serial_output_queue, settings) #all settings comes at least from the websocket
 
-    database_processing = DatabaseProcessing(settings, alarm_input_queue)
+    database_processing = DatabaseProcessing(settings, db_handler, alarm_input_queue)
 
     # Thread that handles bidirectional communication
     ser_thread = mp.Process(target=ser_handler.run,
@@ -100,8 +100,7 @@ def run():
 
     while True:
         # check if all subprocesses are running
-        if (ser_thread.is_alive() == False
-            or db_thread.is_alive() == False
+        if (db_thread.is_alive() == False
             or websocket_thread.is_alive() == False
             or alarm_thread.is_alive() == False
             or request_thread.is_alive() == False
@@ -113,7 +112,7 @@ def run():
 
     print("One subprocess was terminated, killing other subprocesses")
 
-    ser_thread.kill()
+#    ser_thread.kill()
     db_thread.kill()
     websocket_thread.kill()
     alarm_thread.kill()

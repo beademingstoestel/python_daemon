@@ -13,8 +13,17 @@ class DbClient():
         self.db = None
         self.queue = db_queue
 
+        # Only start MongoClient after fork() --> for testing move to init
+        try:
+            self.client = MongoClient(self.addr)
+        except errors.ConnectionFailure:
+            print("Unable to connect, client will attempt to reconnect")
+
+        self.db = self.client.beademing
+
     def store_pressure(self, pressure_val):
         collection = self.db.pressure_values
+        print('store_pressure')
         self.__store_value(collection, pressure_val)
 
     def store_volume(self, volume_val):
@@ -43,8 +52,8 @@ class DbClient():
         except errors.ConnectionFailure:
             print("Lost connection, client will attempt to reconnect")
 
-    def last_n_data(self, type_data, N=12000):
-        # retrieve the last "N" added measurement N = 12000 data recorded at 200Hz
+    def last_n_data(self, type_data, N=1000):
+        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
         if type_data == 'BPM':
             return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'VOL':
@@ -52,13 +61,16 @@ class DbClient():
         elif type_data == 'TRIG':
             return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'PRES':
-            return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
+            # import pdb
+            # pdb.set_trace()
+            collection = self.db.pressure_values
+            return collection.find().sort("loggedAt", -1).limit(N)
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None
 
-    def last_n_values(self, type_data, N=12000):
-        # retrieve the last "N" added measurement N = 12000 data recorded at 200Hz
+    def last_n_values(self, type_data, N=1000):
+        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
         collection, data_raw, values, timestamp = [], None, [], []
         if type_data == 'BPM':
             collection = self.db.breathsperminute_values
@@ -73,20 +85,25 @@ class DbClient():
             return None, None
         # send back data raw format + time stamp
         data_raw = collection.find().sort("loggedAt", -1).limit(N)
-        for x in (collection.find({},{ "loggedAt": 0 ,"_id": 0})).sort("loggedAt", -1).limit(100): 
+        for x in (collection.find({}, {"loggedAt": 0, "_id": 0})).sort("loggedAt", -1).limit(100):
             values.append(x.get('value'))
 
         return data_raw, values
-        
+
     def run(self, name):
         print("Starting {}".format(name))
-        # Only start MongoClient after fork()
-        try:
-            self.client = MongoClient(self.addr)
-        except errors.ConnectionFailure:
-            print("Unable to connect, client will attempt to reconnect")
-        
-        self.db = self.client.beademing
+
+
+        #collection = self.db.pressure_values
+        #cnt = collection.find().count()
+        #raw_data = self.last_n_data('PRES')
+        # f = raw_data.find({},{ "_id": 0})
+        #for x in (raw_data):
+        #    print('ok')
+        #    #    val = x.get('value')
+
+        #print("cnt pres values %d" % collection.find().count())
+
         while True:
             try:
                 msg = self.queue.get()
@@ -107,4 +124,3 @@ class DbClient():
                     self.store_cpu(msg['val'])
             except:
                 print("Invalid message from database")
-

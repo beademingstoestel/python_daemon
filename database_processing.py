@@ -5,6 +5,8 @@ import scipy.signal as signal
 from scipy.signal import find_peaks
 import scipy
 import time
+from ventilator_database import DbClient
+import multiprocessing as mp
 
 """
 This class get the recorded pressure values and compute the following:
@@ -28,7 +30,7 @@ class PressureMonitor():
         # raw_data from the Mongo database
         self.pvalues, self.timestamp = [], []
         # send back data raw format + time stamp
-        for x in (raw_data.find({},{ "_id": 0})): 
+        for x in (raw_data):
             self.pvalues.append(float(x.get('value')))
             full_time = x.get('loggedAt')
             tmp = (float(full_time.time().hour)*3600+float(full_time.time().minute)*60+float(full_time.time().second))*1e3+float(full_time.time().microsecond)/1e3
@@ -57,11 +59,15 @@ class PressureMonitor():
 
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
-        start_pp = self.ppeaks[0]
-        end_pp   = self.ppeaks[-1]
+        try:
+            start_pp = self.ppeaks[0]
+            end_pp   = self.ppeaks[-1]
+        except:
+            print('error') #todo send alarm here too
+
         # keep the falling edge in between
-        npeaks = npeaks[self.npeaks>start_pp]
-        npeaks = npeaks[self.npeaks<end_pp]
+        self.npeaks = self.npeaks[self.npeaks>start_pp]
+        self.npeaks = self.npeaks[self.npeaks<end_pp]
 
     # get the BPM
     def get_nbr_bpm(self): 
@@ -179,19 +185,27 @@ class PressureMonitor():
         pass
 
 class DatabaseProcessing():
-    def __init__(self, settings, alarm_queue):
+    def __init__(self, settings, db_handler, alarm_queue):
         self.settings = settings
+        self.db_handler = db_handler
+        self.alarm_queue = alarm_queue
+        self.alarm_bits = 0
 
     def run(self, name):
         print("Starting {}".format(name))
         while True:
-            #read
-            data = ""
-            pressureMonitor = PressureMonitor(data)
-            breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressureMonitor.get_nbr_bpm()
-            if breathing_cycle_per_minute < self.settings['IE']:
-            time.sleep(0.5)
-            print("processing ", self.settings)
+            try:
+                data = self.db_handler.last_n_data('PRES')
+                pressureMonitor = PressureMonitor(data)
+                breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressureMonitor.get_nbr_bpm()
+                if breathing_cycle_per_minute > 0: #self.settings['IE']:
+                    print("breathing at %d" % breathing_cycle_per_minute)
+                    self.alarm_bits = 1 #frank will define these
+                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                time.sleep(0.5)
+                print("processing ", self.settings)
+            except:
+                print('error occurred')
 
 
 
