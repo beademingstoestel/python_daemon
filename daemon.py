@@ -112,7 +112,7 @@ def run():
 
     print("One subprocess was terminated, killing other subprocesses")
 
-#    ser_thread.kill()
+    ser_thread.kill()
     db_thread.kill()
     websocket_thread.kill()
     alarm_thread.kill()

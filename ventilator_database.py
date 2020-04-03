@@ -13,7 +13,7 @@ class DbClient():
         self.db = None
         self.queue = db_queue
 
-        # Only start MongoClient after fork() --> for testing move to init
+        # Only start MongoClient after fork()
         try:
             self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
@@ -92,6 +92,7 @@ class DbClient():
 
     def run(self, name):
         print("Starting {}".format(name))
+
 
 
         #collection = self.db.pressure_values
