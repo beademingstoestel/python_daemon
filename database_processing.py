@@ -103,7 +103,7 @@ class PressureMonitor():
     # TODO check from where we can get the values of the desired pressure, threshold and nbr data point in this function
     def check_pressure_tracking_performance(self, pressure_desired = 51, threshold_dp = 3, nbr_data_point = 5):
         """
-        data are saved at 200Hz i.e. every 0.05s as an inhale state in average ~ 0.75second (from recorded data)
+        data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
         we will have during this period 15 data points
         for the  different dp = pressure_desired - pressre_measured 
         we will check the 5 data points before the falling edge
@@ -118,6 +118,25 @@ class PressureMonitor():
         # return
         return nbr_dp_above_threshold, dp_list
 
+    # TODO check from where we can get the values of the peep_value, threshold and nbr data point in this function
+    def detect_pressure_below_peep(self, peep_value = 10, threshold_dp_peep = 5, nbr_data_point = 35):
+        """
+        data are saved every ~0.05s as an exhale state in average ~ 2.50second (from recorded data 02/04/2020)
+        we will have during this period 50 data points
+        for the peep below  
+        we will check the 35 data points before the rising edge
+        """
+        # measure the absolute differentce to the desired pressure and then take the average of the n measure
+        below_peep_list = []
+        for indice_bc in self.ppeaks[1:]:
+            dp = self.pvalues[indice_bc-nbr_data_point:indice_bc] - peep_value
+            dp[dp>0]=0
+            below_peep_list.append(abs(min(dp)))
+        # nbr of time inhale or exhale duration is above the the threshold dt
+        nbr_dp_peep_above_threshold = sum(float(num) >= threshold_dp_peep for num in below_peep_list)
+        # return
+        return nbr_dp_peep_above_threshold, below_peep_list
+
     # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
         if abs(sign) == 1:
@@ -128,11 +147,14 @@ class PressureMonitor():
         # send back teh peaks found
         return peaks
 
+    
+    # TODO How to call the function and get the correct parametersa!!
     def run(self):
         """
         @ question to Tom/Erwin
             * do we run the above functions here and then send the alarms!
             or do we call the functions from outside and set the alarm there!!!
+            or run everything when the object is created in init ???
         """
         pass
 
