@@ -5,8 +5,7 @@ import scipy.signal as signal
 from scipy.signal import find_peaks
 import scipy
 import time
-from ventilator_database import DbClient
-import multiprocessing as mp
+from pymongo import MongoClient, errors
 
 """
 This class get the recorded pressure values and compute the following:
@@ -179,28 +178,63 @@ class PressureMonitor:
 
 
 class DatabaseProcessing:
-    def __init__(self, settings, db_handler, alarm_queue):
+    def __init__(self, settings, alarm_queue, addr='mongodb://localhost:27017'):
         self.settings = settings
-        self.db_handler = db_handler
+        self.addr = addr
         self.alarm_queue = alarm_queue
         self.alarm_bits = 0
+        self.db = None
+
+    def last_n_data(self, type_data, N=1000):
+        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
+        if type_data == 'BPM':
+            return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
+        elif type_data == 'VOL':
+            return self.db.volume_values.find().find().sort("loggedAt", -1).limit(N)
+        elif type_data == 'TRIG':
+            return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
+        elif type_data == 'PRES':
+            return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
+        else:
+            print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            return None
+
+    def last_n_values(self, type_data, N=1000):
+        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
+        collection, data_raw, values, timestamp = [], None, [], []
+        if type_data == 'BPM':
+            collection = self.db.breathsperminute_values
+        elif type_data == 'VOL':
+            collection = self.db.volume_values
+        elif type_data == 'TRIG':
+            collection = self.db.trigger_values
+        elif type_data == 'PRES':
+            collection = self.db.pressure_values
+        else:
+            print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            return None, None
+        # send back data raw format + time stamp
+        data_raw = collection.find().sort("loggedAt", -1).limit(N)
+        for x in (collection.find({}, {"loggedAt": 0, "_id": 0})).sort("loggedAt", -1).limit(100):
+            values.append(x.get('value'))
+
+        return data_raw, values
 
     def run(self, name):
         print("Starting {}".format(name))
 
-        #temp solution because the mongo-client initialisation is not available ssince it is created by the ventilor_database (multiprocessing issue, need a proxy)
         # Only start MongoClient after fork()
-        from pymongo import MongoClient, errors
+        # and each child process should have its own instance of the client
         try:
-            self.client = MongoClient(self.db_handler.addr)
+            self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
             print("Unable to connect, client will attempt to reconnect")
 
-        self.db_handler.db = self.client.beademing
+        self.db = self.client.beademing
 
         while True:
             try:
-                data = self.db_handler.last_n_data('PRES')
+                data = self.last_n_data('PRES')
                 pressure_monitor = PressureMonitor(data)
                 
                 # BT: Below Threshold
@@ -240,30 +274,8 @@ class DatabaseProcessing:
                 # Pressure below peep value 'PP', # PEEP (positive end expiratory pressure) # 'ADPP', # Allowed deviation PEEP
                 # in the function defaults values are 10/5
                 nbr_dp_peep_AT, below_peep_list = pressure_monitor.detect_pressure_below_peep(peep_value=self.settings['PP'], threshold_dp_peep=self.settings['ADPK'], nbr_data_point=35)
-                
-                
-                
-                
-                
+
                 print("processing ", self.settings)
-
-
-"""
-settings = [
-            
-            
-            
-            
-            'PS',   # support pressure
-            
-            'RP', # ramp time
-            'TP', # trigger pressure
-
-            'VT',   # Tidal Volume
-            'ADVT', # Allowed deviation Tidal Volume
-            
-]
-"""
 
             except Exception as inst:
                 print('Exception occurred: ', inst)

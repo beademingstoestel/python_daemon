@@ -47,13 +47,15 @@ def run():
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue, port = userport)
     else:
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue)
-    db_handler = DbClient(db_queue)
+
     websocket_handler = WebsocketHandler(serial_output_queue)
     alarm_handler = AlarmHandler(alarm_input_queue, serial_output_queue, request_queue)
     request_handler = RequestHandler(api_request, request_queue)
     setting_handler = SettingHandler(serial_output_queue, settings) #all settings comes at least from the websocket
 
-    database_processing = DatabaseProcessing(settings, db_handler, alarm_input_queue)
+    addr = 'mongodb://localhost:27017'
+    db_handler = DbClient(db_queue, addr)
+    database_processing = DatabaseProcessing(settings, alarm_input_queue, addr)
 
     # Thread that handles bidirectional communication
     ser_thread = mp.Process(target=ser_handler.run,
@@ -98,10 +100,12 @@ def run():
     setting_thread.start()
     processing_thread.start()
 
+    #ser_thread.is_alive() == False
+    #or
+
     while True:
         # check if all subprocesses are running
-        if (ser_thread.is_alive() == False
-            or db_thread.is_alive() == False
+        if (db_thread.is_alive() == False
             or websocket_thread.is_alive() == False
             or alarm_thread.is_alive() == False
             or request_thread.is_alive() == False
