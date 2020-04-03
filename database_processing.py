@@ -63,7 +63,7 @@ class PressureMonitor():
         npeaks = npeaks[self.npeaks>start_pp]
         npeaks = npeaks[self.npeaks<end_pp]
 
-    # get the NBM
+    # get the BPM
     def get_nbr_bpm(self): 
         # number of breathing cycle
         # -1 : to garantee that we have a complete one at the end
@@ -81,7 +81,7 @@ class PressureMonitor():
         #  send back the following values!
         return breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle
 
-    # TODO check from where we can get the values of the threshold in this function
+    # TODO check from where we can get the values of the threshold for this function
     def analyze_inhale_exhale_time(self, threshold_ratio_ie=2.75, threshold_dt_ie=10):
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
@@ -100,7 +100,8 @@ class PressureMonitor():
         # return 
         return nbr_ratio_below_threshold, nbr_dtinhale_above_threshold, nbr_dtexhale_above_threshold
 
-    # TODO check from where we can get the values of the desired pressure, threshold and nbr data point in this function
+    # TODO check from where we can get the values of the desired pressure, threshold and nbr data point for this function
+    # nbr_data_point from falling edge and going back
     def check_pressure_tracking_performance(self, pressure_desired = 51, threshold_dp = 3, nbr_data_point = 5):
         """
         data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
@@ -118,7 +119,8 @@ class PressureMonitor():
         # return
         return nbr_dp_above_threshold, dp_list
 
-    # TODO check from where we can get the values of the peep_value, threshold and nbr data point in this function
+    # TODO check from where we can get the values of the peep_value, threshold and nbr data point for this function
+    # nbr_data_point from rising edge and going back
     def detect_pressure_below_peep(self, peep_value = 10, threshold_dp_peep = 5, nbr_data_point = 35):
         """
         data are saved every ~0.05s as an exhale state in average ~ 2.50second (from recorded data 02/04/2020)
@@ -136,6 +138,24 @@ class PressureMonitor():
         nbr_dp_peep_above_threshold = sum(float(num) >= threshold_dp_peep for num in below_peep_list)
         # return
         return nbr_dp_peep_above_threshold, below_peep_list
+
+    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
+    # nbr_data_from rising edge and going forward
+    def pressure_peak_overshoot(self, pressure_desired = 51, threshold_dp_overshoot = 3, nbr_data_point = 10):
+        """
+        data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
+        we will have during this period 15 data points
+        for the  overshoot dp = pressure_desired - pressre_measured 
+        we will check the 10 data points after the rising edge
+        """
+        overshoot_pressure_list = []
+        for indice_bc in self.ppeaks:
+            dp = self.pvalues[indice_bc:indice_bc+nbr_data_point] - pressure_desired
+            overshoot_pressure_list.append((max(dp)))
+        # nbr of time inhale or exhale duration is above the the threshold dt
+        nbr_pressure_overshoot_above_threshold = sum(float(num) >= threshold_dp_overshoot for num in overshoot_pressure_list)
+        # return
+        return nbr_pressure_overshoot_above_threshold, overshoot_pressure_list
 
     # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
