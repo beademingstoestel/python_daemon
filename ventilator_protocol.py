@@ -16,7 +16,7 @@ measurements = ['BPM',  # Breaths per minute
 settings = ['RR',   # Respiratory rate
             'VT',   # Tidal Volume
             'PK',   # Peak Pressure
-            'TS',  # Breath Trigger Threshold
+            'TS',   # Breath Trigger Threshold
             'IE',   # Inspiration/Expiration (N for 1/N)
             'PP',   # PEEP (positive end expiratory pressure)
             'ADPK', # Allowed deviation Peak Pressure
@@ -68,7 +68,7 @@ def construct_serial_message(key, val, id):
     msg_bytes += bytearray('=','ascii')
     msg_bytes.append(compute_LRC(msg_bytes))
     msg_bytes += bytearray("\n", 'ascii')
-
+    
     return msg_bytes
 
 def construct_ack_message(id):
