@@ -17,6 +17,9 @@ This class get the recorded pressure values and compute the following:
         * check if in the arrray a values is > 10
     5) OK -- ratio between inhale exhale in the database if it is above threshold 
     6) detect when the pressure goes below a "peep" threshold TBD during the exhale period T
+
+Notes
+    * param defaults values were chosen when anyalisng the data recorded on the 02/04/2020
 """
 
 class PressureMonitor():
@@ -60,6 +63,7 @@ class PressureMonitor():
         npeaks = npeaks[self.npeaks>start_pp]
         npeaks = npeaks[self.npeaks<end_pp]
 
+    # get the NBM
     def get_nbr_bpm(self): 
         # number of breathing cycle
         # -1 : to garantee that we have a complete one at the end
@@ -77,7 +81,7 @@ class PressureMonitor():
         #  send back the following values!
         return breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle
 
-    # TODO check from where we can get the values of the used threshold in this function
+    # TODO check from where we can get the values of the threshold in this function
     def analyze_inhale_exhale_time(self, threshold_ratio_ie=2.75, threshold_dt_ie=10):
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
@@ -96,6 +100,25 @@ class PressureMonitor():
         # return 
         return nbr_ratio_below_threshold, nbr_dtinhale_above_threshold, nbr_dtexhale_above_threshold
 
+    # TODO check from where we can get the values of the desired pressure, threshold and nbr data point in this function
+    def check_pressure_tracking_performance(self, pressure_desired = 51, threshold_dp = 3, nbr_data_point = 5):
+        """
+        data are saved at 200Hz i.e. every 0.05s as an inhale state in average ~ 0.75second (from recorded data)
+        we will have during this period 15 data points
+        for the  different dp = pressure_desired - pressre_measured 
+        we will check the 5 data points before the falling edge
+        """
+        # measure the absolute differentce to the desired pressure and then take the average of the n measures
+        dp_list = []
+        for indice_bc in self.npeaks:
+            dp = abs(self.pvalues[indice_bc-nbr_data_point:indice_bc] - pressure_desired)
+            dp_list.append(np.mean(dp))
+        # nbr of time inhale or exhale duration is above the the threshold dt
+        nbr_dp_above_threshold = sum(float(num) >= threshold_dp for num in dp_list)
+        # return
+        return nbr_dp_above_threshold, dp_list
+
+    # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
         if abs(sign) == 1:
             peaks, _ = find_peaks(sign*signal_x, height=h, distance=d)
@@ -105,7 +128,13 @@ class PressureMonitor():
         # send back teh peaks found
         return peaks
 
-
+    def run(self):
+        """
+        @ question to Tom/Erwin
+            * do we run the above functions here and then send the alarms!
+            or do we call the functions from outside and set the alarm there!!!
+        """
+        pass
 
 
 
