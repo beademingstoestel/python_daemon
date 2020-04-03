@@ -23,6 +23,7 @@ class WebsocketHandler():
             if key in settings:
                 print("send setting {}".format(key))
                 self.serial_queue.put({'type': key, 'val': settings[key]})
+                self.setting_queue.put({'type': key, 'val': settings[key]})
 
                 if key == 'ACTIVE' and settings[key] == 1:
                     # user wants to turn on the machine, play beep for confirmation
@@ -86,11 +87,11 @@ class WebsocketHandler():
             except:
                 continue
 
-    def __init__(self, serial_queue, addr='localhost', port=3001):
+    def __init__(self, serial_queue, setting_queue, addr='localhost', port=3001):
         self.url = "ws://" + addr + ":" + str(port) + "/"
         self.id = 1
         self.serial_queue = serial_queue
-
+        self.setting_queue = setting_queue
 
 if __name__ == "__main__":
     ws = WebsocketHandler()

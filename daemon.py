@@ -37,6 +37,7 @@ def run():
 
     db_queue = mp.Queue() # Queue for values to write to db
     serial_output_queue = mp.Queue() # Queue for messages to send to controller
+    setting_input_queue = mp.Queue()  # Queue for messages to send to controller
     alarm_input_queue = mp.Queue() # Queue for values for Alarm thread
     request_queue = mp.Queue() # Queue with the requests to be sent to the API
 
@@ -48,10 +49,10 @@ def run():
     else:
         ser_handler = SerialHandler(db_queue, request_queue, serial_output_queue, alarm_input_queue)
     db_handler = DbClient(db_queue)
-    websocket_handler = WebsocketHandler(serial_output_queue)
+    websocket_handler = WebsocketHandler(serial_output_queue, setting_input_queue)
     alarm_handler = AlarmHandler(alarm_input_queue,serial_output_queue, request_queue, settings)
     request_handler = RequestHandler(api_request, request_queue)
-    setting_handler = SettingHandler(serial_output_queue, settings) #all settings comes at least from the websocket
+    setting_handler = SettingHandler(setting_input_queue, settings) #all settings comes at least from the websocket
 
     # Thread that handles bidirectional communication
     ser_thread = mp.Process(target=ser_handler.run,

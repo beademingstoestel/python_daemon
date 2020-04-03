@@ -1,4 +1,5 @@
 import queue
+import time
 import ventilator_protocol as proto
 
 #store the recevied settings in a dictonary
@@ -22,6 +23,8 @@ class SettingHandler:
                     value = msg['val']
                     if key in proto.settings:
                         self.settings[key] = value
-                        #print(self.settings)
+                        print(self.settings)
                 except:
                     print("Invalid message")
+
+            time.sleep(0.2)
