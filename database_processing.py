@@ -372,7 +372,7 @@ class DatabaseProcessing:
         if type_data == 'BPM':
             return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'VOL':
-            return self.db.volume_values.find().find().sort("loggedAt", -1).limit(N)
+            return self.db.volume_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'TRIG':
             return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'PRES':
