@@ -8,16 +8,23 @@ import time
 from pymongo import MongoClient, errors
 
 """
-This class get the recorded pressure values and compute the following:
+1st class get the recorded pressure values and compute the following:
     1) OK -- measure the BPM effective
-    2) OK -- check pressure tracking performance 
+    2) ?? -- if pressure > setting*110% (or value from fagg), trigger a warning
+    3) OK -- proposal: if inhale/exhale state do not change for more than 10s.
+    4) OK -- ratio between inhale exhale in the database if it is above threshold 
+    5) OK -- detect when the pressure goes below a "peep" threshold TBD during the exhale period T
+    6) OK -- detect when the pressure peak is not in the allowed range [Pset-dp : Pset+dp]
+    7) ?? -- check pressure tracking performance 
         * look for average absolute tracking errors over past cycle that are larger than ?% (of setpoint?))
-    3) if pressure > setting*110% (or value from fagg), trigger a warning
-    4) OK -- proposal: if inhale/exhale state do not change for more than 10s.
-        * the function returns all the dt_inhale and dt_exhale
-        * check if in the arrray a values is > 10
-    5) OK -- ratio between inhale exhale in the database if it is above threshold 
-    6) detect when the pressure goes below a "peep" threshold TBD during the exhale period T
+        * as setpoint are not availble yet!!! this check is done in a different way:
+            == at the end of the inhale period the pressure values are compared to the desired pressure value
+            
+2nd class get the recorded volume values and compute the following:
+    1) Not tested  -- peak volume per breathing cycle and check if it is in the allowed range [Vset-dv : Vset+dv]
+    2) Not tested  -- check if the volume goes near zero at the end of each breathing cycle  
+
+Last class run run the functions and set the alarms
 
 Notes
     * param defaults values were chosen when anyalisng the data recorded on the 02/04/2020
@@ -69,7 +76,7 @@ class PressureMonitor:
         except:
             raise Exception('no valid data or peaks detected')
 
-    # get the BPM
+    # get the BPM / # Respiratory rate (RR) in settings
     def get_nbr_bpm(self):
         # number of breathing cycle
         # -1 : to garantee that we have a complete one at the end
@@ -87,7 +94,8 @@ class PressureMonitor:
         #  send back the following values!
         return breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle
 
-    # TODO check from where we can get the values of the threshold for this function
+    # 1st param Inspiration/Expiration (N for 1/N) = IE in settings
+    # 2nd param TODO hardcoded value 10 seconds
     def analyze_inhale_exhale_time(self, threshold_ratio_ie=2.75, threshold_dt_ie=10):
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
@@ -106,8 +114,9 @@ class PressureMonitor:
         # return 
         return nbr_ratio_below_threshold, nbr_dtinhale_above_threshold, nbr_dtexhale_above_threshold
 
-    # TODO check from where we can get the values of the desired pressure, threshold and nbr data point for this function
-    # nbr_data_point from falling edge and going back
+    # 1st param Peak Pressure PK in settings
+    # 2nd param Allowed deviation Peak Pressure ADPK in settings
+    # 3rd param nbr_data_point from falling edge and going backward
     def check_pressure_tracking_performance(self, pressure_desired=51, threshold_dp=3, nbr_data_point=5):
         """
         data are saved every ~ 0.05s as an inhale state in average ~ 0.75second (from recorded data 02/04/2020)
@@ -115,7 +124,7 @@ class PressureMonitor:
         for the  different dp = pressure_desired - pressre_measured 
         we will check the 5 data points before the falling edge
         """
-        # measure the absolute differentce to the desired pressure and then take the average of the n measures
+        # measure the absolute difference to the desired pressure and then take the average of the n measures
         dp_list = []
         for indice_bc in self.npeaks:
             dp = abs(np.array(self.pvalues[indice_bc - nbr_data_point:indice_bc]) - pressure_desired)
@@ -125,8 +134,9 @@ class PressureMonitor:
         # return
         return nbr_dp_above_threshold, dp_list
 
-    # TODO check from where we can get the values of the peep_value, threshold and nbr data point for this function
-    # nbr_data_point from rising edge and going back
+    # 1st param peep value 'PP' in settings
+    # 2nd param Allowed deviation PEEP 'ADPP' in settings
+    # 3rd param nbr_data_point from rising edge and going back
     def detect_pressure_below_peep(self, peep_value=10, threshold_dp_peep=5, nbr_data_point=35):
         """
         data are saved every ~0.05s as an exhale state in average ~ 2.50second (from recorded data 02/04/2020)
@@ -134,7 +144,6 @@ class PressureMonitor:
         for the peep below  
         we will check the 35 data points before the rising edge
         """
-        # measure the absolute differentce to the desired pressure and then take the average of the n measure
         below_peep_list = []
         for indice_bc in self.ppeaks[1:]:
             dp = np.array(self.pvalues[indice_bc - nbr_data_point:indice_bc]) - peep_value
@@ -145,7 +154,8 @@ class PressureMonitor:
         # return
         return nbr_dp_peep_above_threshold, below_peep_list
 
-    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
+    # 1st param Peak Pressure PK in settings
+    # 2nd Allowed deviation Peak Pressure ADPK in settings
     # nbr_data_from rising edge and going forward
     def pressure_peak_overshoot(self, pressure_desired=51, threshold_dp_overshoot=3, nbr_data_point=10):
         """
@@ -164,8 +174,8 @@ class PressureMonitor:
         # return
         return nbr_pressure_overshoot_above_threshold, overshoot_pressure_list
 
-    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
-    # nbr_data_from rising edge and going forward
+    # 1st param Peak Pressure PK in settings
+    # 2nd Allowed deviation Peak Pressure ADPK in settings
     def pressure_peak_too_low_high(self, pressure_desired=51, threshold_dp=3):
         # find all the peaks of the loaded breathing cycles
         ind_max_pressure = find_peaks_signal(self.pvalues, 1, h=pressure_desired-threshold_dp, d=50)
@@ -235,8 +245,8 @@ class VolumeMonitor:
         except:
             raise Exception('no valid data or peaks detected')
 
-    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
-    # nbr_data_from rising edge and going forward
+    # 1st param desired volume VT in settings
+    # 2nd param allowed deviation in volume ADVT in setting
     def volume_peak_too_low_high(self, volume_desired=150, threshold_dv=30):
         # find all the peaks of the loaded breathing cycles
         ind_max_volume = find_peaks_signal(self.vvalues, 1, h=volume_desired-threshold_dv, d=50)
@@ -283,7 +293,7 @@ class DatabaseProcessing:
         self.db = None
 
     def last_n_data(self, type_data, N=1000):
-        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
+        # retrieve the last "N" added measurement N = 1000
         if type_data == 'BPM':
             return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'VOL':
@@ -297,7 +307,7 @@ class DatabaseProcessing:
             return None
 
     def last_n_values(self, type_data, N=1000):
-        # retrieve the last "N" added measurement N = 1000 data recorded at 200Hz
+        # retrieve the last "N" added measurement N = 1000
         collection, data_raw, values, timestamp = [], None, [], []
         if type_data == 'BPM':
             collection = self.db.breathsperminute_values
@@ -318,14 +328,13 @@ class DatabaseProcessing:
         return data_raw, values
 
     def run(self, name):
-        print("Starting {}".format(name))
-
+        print("[INFO] Starting {}".format(name))
         # Only start MongoClient after fork()
         # and each child process should have its own instance of the client
         try:
             self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
-            print("Unable to connect, client will attempt to reconnect")
+            print("[ERROR] Unable to connect, client will attempt to reconnect")
 
         self.db = self.client.beademing
 
@@ -344,7 +353,7 @@ class DatabaseProcessing:
                 # BPM - # Respiratory rate (RR) 
                 breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
                 if breathing_cycle_per_minute > self.settings['RR']:
-                    print("[INFO] Breathing at %d per minute" % breathing_cycle_per_minute)
+                    print("[WARNING] Breathing at {} per minute".format(breathing_cycle_per_minute))
                     self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
                 
@@ -353,22 +362,22 @@ class DatabaseProcessing:
                 nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['IE'],
                                                                                                             threshold_dt_ie=10)
                 if nbr_ratio_BT > 0:
-                    print("[INFO] Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
+                    print("[WARNING] # Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
                     self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 if nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
-                    print("[INFO] Breath Trigger Threshold (TS) : {} ".format(nbr_dtinhale_AT))
+                    print("[WARNING] # inhale time above 10s : {} and # exhale time above 10s :{} ".format(nbr_dtinhale_AT, nbr_dtexhale_AT))
                     self.alarm_bits = self.alarm_bits | int('00000100', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
                 
-                # Pressure performance Tracking -- Peak Pressure PK and ADPP Allowed deviation Peak Pressure
+                # Pressure performance Tracking -- Peak Pressure PK and ADPK Allowed deviation Peak Pressure
                 # in the function defaults values are 51 / 3 / (5 for data points)
                 nbr_dp_AT, dp_list = pressure_monitor.check_pressure_tracking_performance(pressure_desired=self.settings['PK'],
                                                                         threshold_dp=self.settings['ADPK'],
                                                                         nbr_data_point=5)
                 if nbr_dp_AT > 3:
-                    print("[INFO] Pressure tracking performance deviate {}".format(nbr_dp_AT))
+                    print("[WARNING] # Pressure deviate during inhale {}".format(nbr_dp_AT))
                     self.alarm_bits = self.alarm_bits | int('00001000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
@@ -378,53 +387,66 @@ class DatabaseProcessing:
                                                                                             threshold_dp_peep=self.settings['ADPP'],
                                                                                             nbr_data_point=35)
                 if nbr_dp_peep_AT > 0:
-                    print("[INFO] Pressure below peep level detected {}".format(nbr_dp_peep_AT))
+                    print("[WARNING] # Pressure below peep level detected {}".format(nbr_dp_peep_AT))
                     self.alarm_bits = self.alarm_bits | int('00010000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 
                 """
-                # TODO confirm that this function is no longer needed
+                # TODO confirm that this function is no longer needed 
+                # TODO if yes alarm value need to be changed then
                 # Detect when the pressure_peak_overshoot
                 # default values are 51 / 3
                 nbr_pressure_overshoot_AT, overshoot_pressure_list = pressure_monitor.pressure_peak_overshoot(pressure_desired=self.settings['PK'],
                                                                                                             threshold_dp_overshoot=self.settings['ADPK'],
                                                                                                             nbr_data_point=10)
                 if nbr_pressure_overshoot_AT > 0:
-                    print("[INFO] Pressure peak overshoot {}".format(nbr_pressure_overshoot_AT))
+                    print("[WARNING] Pressure peak overshoot {}".format(nbr_pressure_overshoot_AT))
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
                 """
-                # Detect when the pressure peak of breathing cycle is not in the range defined 
+
+                # Detect when the pressure peak of breathing cycle is not in the allowed range defined 
                 # default values are PK = 51 / ADPK = 3
                 nbr_pressure_AT_BT, deviate_pressure_list = pressure_monitor.pressure_peak_too_low_high(pressure_desired=self.settings['PK'], 
                                                                                                     threshold_dp=self.settings['ADPK'])
                 if nbr_pressure_AT_BT > 0:
-                    print("[INFO] Pressure outside the allowed range {}".format(nbr_pressure_AT_BT))
+                    print("[WARNING] # Pressure outside the allowed range {}".format(nbr_pressure_AT_BT))
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
 
-                # function  to find the peak ==>> at the begining peak of the cycle 
+                # desired volume VT / allowed deviation volume ADVT
+                # function  to find the peak volume ==>> at the begining peak of the cycle 
                 nbr_volume_AT_BT, deviate_volume_list = volume_monitor.volume_peak_too_low_high(volume_desired=self.settings['VT'],
                                                                                                 threshold_dv=self.settings['ADVT'])
                 if nbr_volume_AT_BT > 0:
-                    print("[INFO] Volume outside the allowed range {}".format(nbr_volume_AT_BT))
+                    print("[WARNING] # Volume outside the allowed range {}".format(nbr_volume_AT_BT))
                     self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
                 # function to check volume near 0 ==>> at the end of every cycle 
+                # TODO do we have in the settings a value for the threshold_dv_zero? if we need to find value 0 set then the threshold to 0
                 nbr_volome_not_near_zero_ebc, volume_near_zero_list = volume_monitor.detect_volume_not_near_zero_ebc(threshold_dv_zero=5, 
                                                                                                                     nbr_data_point=35)
                 if nbr_volome_not_near_zero_ebc > 0:
-                    print("[INFO] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
+                    print("[WARNING] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
                     self.alarm_bits = self.alarm_bits | int('10000000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
-                print("processing ", self.settings)
+                print("*"*21)
+                print("[INFO] Processing Settnings", self.settings)
+                print("[INFO] BPM = {}".format(breathing_cycle_per_minute,))
+                print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
+                print("[INFO] # pressure desired not reached ".format(nbr_dp_AT))
+                print("[INFO] # pressure below peep+dp = {} ".format(nbr_dp_peep_AT))
+                print("[INFO] # peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
+                print("[INFO] # peak volume not in allowed range = {}".format(nbr_volume_AT_BT))
+                print("[INFO] # volume not near zero at ebc = {} ".format(nbr_volome_not_near_zero_ebc))
+                print("*"*21)
 
             except Exception as inst:
-                print('Exception occurred: ', inst)      # TODO check the alarm code below
+                print('[WARNING] Exception occurred: ', inst)      # TODO check the alarm code below
                 self.alarm_bits = self.alarm_bits | int('11111111', 2)  # frank will define these bits, example for now 8-bit
                 self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
