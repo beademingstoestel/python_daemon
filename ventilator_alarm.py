@@ -62,7 +62,7 @@ class AlarmHandler():
                 msg = None
 
             if msg != None:
-                if msg['type'] == "ALARM":
+                if msg['type'] == proto.alarm:
                     self.time_last_kick_received == cur_time
                     if not self.first_watchdog_kick_received:
                         self.first_watchdog_kick_received = True
