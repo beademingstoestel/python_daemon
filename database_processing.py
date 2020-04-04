@@ -191,6 +191,77 @@ class PressureMonitor:
         return peaks
 
 
+class VolumeMonitor:
+    def __init__(self, raw_data, median_kernel_size=11):
+        super().__init__()
+        # raw_data from the Mongo database
+        self.vvalues, self.timestamp = [], []
+        # send back data raw format + time stamp
+        for x in (raw_data):
+            self.vvalues.append(float(x.get('value')))
+            full_time = x.get('loggedAt')
+            tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
+                full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
+            self.timestamp.append(tmp)
+
+        # reverse the order of the element because they are retrieved 
+        # in reverse order from the Mongo database
+        self.timestamp.reverse()
+        self.vvalues.reverse()
+
+        # median fileter size = median_kernel_size
+        # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
+        vvalues_filtered = signal.medfilt(self.vvalues, median_kernel_size)
+        # compute the first derivative of the pressure signal
+        d_volume = np.zeros(vvalues_filtered.shape, np.float)
+        d_volume[0:-1] = np.diff(vvalues_filtered) / (np.diff(self.timestamp) * 1e-3)
+        d_volume[-1] = (vvalues_filtered[-1] - vvalues_filtered[-2]) / (self.timestamp[-1] - self.timestamp[-2])
+
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
+        # TODO h/d value could be defined as parameters to read from the config file!!
+        # TODO check if we need to adjust the distance between peaks
+        # get the location of rising edge
+        self.ppeaks = self.find_peaks_signal(d_volume, +1, h=100, d=50)
+        # get the location of falling edge
+        self.npeaks = self.find_peaks_signal(d_volume, -1, h=100, d=50)
+
+        # keep only complete breathing cycles
+        # should start with peak_positive and end with one as well
+        try:
+            start_pp = self.ppeaks[0]
+            end_pp = self.ppeaks[-1]
+            # keep the falling edge in between
+            self.npeaks = self.npeaks[self.npeaks > start_pp]
+            self.npeaks = self.npeaks[self.npeaks < end_pp]
+        except:
+            raise Exception('no valid data or peaks detected')
+
+    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
+    # nbr_data_from rising edge and going forward
+    def volume_peak_too_low_high(self, volume_desired=150, threshold_dv=30):
+        # find all the peaks of the loaded breathing cycles
+        ind_max_volume = find_peaks_signal(self.vvalues, 1, h=volume_desired-threshold_dv, d=50)
+        if len(ind_max_volume)==0:
+            # No peak was found in the data loaded -->> rise an alarm !!!
+            dvolume_deviate_list = None
+            nbr_volume_deviate = 100
+        else:
+            dvolume_deviate_list = abs(np.array(self.vvalues)[ind_max_volume.astype(int)]-volume_desired)
+            # nbr of time inhale or exhale duration is above the the threshold dt
+            nbr_volume_deviate = sum(float(num) >= threshold_dv for num in dvolume_deviate_list)
+        # return
+        return nbr_volume_deviate, dvolume_deviate_list
+
+    # find all the peaks that are in the signal
+    def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
+        if abs(sign) == 1:
+            peaks, _ = find_peaks(sign * signal_x, height=h, distance=d)
+        else:
+            peaks = None
+            print("[WARNING] sign should be either +1 or -1")
+        # send back teh peaks found
+        return peaks
+
 class DatabaseProcessing:
     def __init__(self, settings, alarm_queue, addr='mongodb://localhost:27017'):
         self.settings = settings
@@ -250,9 +321,11 @@ class DatabaseProcessing:
 
         while True:
             try:
-                data = self.last_n_data('PRES')
-                pressure_monitor = PressureMonitor(data)
-                
+                data_p = self.last_n_data('PRES')
+                pressure_monitor = PressureMonitor(data_p)
+                data_v = self.last_n_data('VOL') 
+                volume_monitor   = VolumeMonitor(data_v)
+
                 # BT: Below Threshold
                 # AT Above Threshold
 
@@ -319,7 +392,17 @@ class DatabaseProcessing:
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
+
+                # function  to find the peak ==>> at the begining peak of the cycle 
+                nbr_volume_AT_BT, deviate_volume_list = volume_monitor.volume_peak_too_low_high(volume_desired=self.settings['VT'],
+                                                                                                threshold_dv=self.settings['ADVT'])
+                if nbr_volume_AT_BT > 0:
+                    print("[INFO] Volume outside the allowed range {}".format(nbr_volume_AT_BT))
+                    self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+
                 print("processing ", self.settings)
+
 
             except Exception as inst:
                 print('Exception occurred: ', inst)
@@ -333,5 +416,4 @@ class DatabaseProcessing:
 """
 TODO
 * add function to check volume near 0 ==>> at the end of every cycle 
-* add function  to find the peak ==>> at the begining peak of the cycle 
 """
