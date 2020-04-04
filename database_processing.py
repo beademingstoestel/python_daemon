@@ -164,6 +164,22 @@ class PressureMonitor:
         # return
         return nbr_pressure_overshoot_above_threshold, overshoot_pressure_list
 
+    # TODO check from where we can get the values of the pressure_desired, threshold and nbr data point for this function
+    # nbr_data_from rising edge and going forward
+    def pressure_peak_too_low_high(self, pressure_desired=51, threshold_dp=3):
+        # find all the peaks of the loaded breathing cycles
+        ind_max_pressure = find_peaks_signal(self.pvalues, 1, h=pressure_desired-threshold_dp, d=50)
+        if len(ind_max_pressure)==0:
+            # No peak was found in the data loaded -->> rise an alarm !!!
+            dpressure_deviate_list = None
+            nbr_pressure_deviate = 100
+        else:
+            dpressure_deviate_list = abs(np.array(self.pvalues)[ind_max_pressure.astype(int)]-pressure_desired)
+            # nbr of time inhale or exhale duration is above the the threshold dt
+            nbr_pressure_deviate = sum(float(num) >= threshold_dp for num in dpressure_deviate_list)
+        # return
+        return nbr_pressure_deviate, dpressure_deviate_list
+
     # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
         if abs(sign) == 1:
@@ -240,17 +256,17 @@ class DatabaseProcessing:
                 # BT: Below Threshold
                 # AT Above Threshold
 
-                # BPM - performance 'IE',   # Inspiration/Expiration (N for 1/N)
+                # BPM - # Respiratory rate (RR) 
                 breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
-                if breathing_cycle_per_minute > self.settings['IE']:
+                if breathing_cycle_per_minute > self.settings['RR']:
                     print("[INFO] Breathing at %d per minute" % breathing_cycle_per_minute)
                     self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
                 
-                # Respiratory rate (RR) and Breath Trigger Threshold (TS)
-                # in the function definition used as default values 2.75 / 10s
-                nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['RR'],
-                                                                                                                threshold_dt_ie=self.settings['TS'])
+                # performance 'IE',   # Inspiration/Expiration (N for 1/N)
+                # in the function definition used as default values 2.75 / 10 seconds
+                nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['IE'],
+                                                                                                            threshold_dt_ie=10)
                 if nbr_ratio_BT > 0:
                     print("[INFO] Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
                     self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
@@ -266,7 +282,7 @@ class DatabaseProcessing:
                 nbr_dp_AT, dp_list = pressure_monitor.check_pressure_tracking_performance(pressure_desired=self.settings['PK'],
                                                                         threshold_dp=self.settings['ADPK'],
                                                                         nbr_data_point=5)
-                if nbr_dp_AT > 0:
+                if nbr_dp_AT > 3:
                     print("[INFO] Pressure tracking performance deviate {}".format(nbr_dp_AT))
                     self.alarm_bits = self.alarm_bits | int('00001000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
@@ -274,13 +290,16 @@ class DatabaseProcessing:
                 # Pressure below peep value 'PP', # PEEP (positive end expiratory pressure) # 'ADPP', # Allowed deviation PEEP
                 # in the function defaults values are 10/5
                 nbr_dp_peep_AT, below_peep_list = pressure_monitor.detect_pressure_below_peep(peep_value=self.settings['PP'],
-                                                                                            threshold_dp_peep=self.settings['ADPK'],
+                                                                                            threshold_dp_peep=self.settings['ADPP'],
                                                                                             nbr_data_point=35)
                 if nbr_dp_peep_AT > 0:
                     print("[INFO] Pressure below peep level detected {}".format(nbr_dp_peep_AT))
                     self.alarm_bits = self.alarm_bits | int('00010000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
+                
+                """
+                # TODO confirm that this function is no longer needed
                 # Detect when the pressure_peak_overshoot
                 # default values are 51 / 3
                 nbr_pressure_overshoot_AT, overshoot_pressure_list = pressure_monitor.pressure_peak_overshoot(pressure_desired=self.settings['PK'],
@@ -288,6 +307,15 @@ class DatabaseProcessing:
                                                                                                             nbr_data_point=10)
                 if nbr_pressure_overshoot_AT > 0:
                     print("[INFO] Pressure peak overshoot {}".format(nbr_pressure_overshoot_AT))
+                    self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                """
+                # Detect when the pressure peak of breathing cycle is not in the range defined 
+                # default values are PK = 51 / ADPK = 3
+                nbr_pressure_AT_BT, deviate_pressure_list = pressure_monitor.pressure_peak_too_low_high(pressure_desired=self.settings['PK'], 
+                                                                                                    threshold_dp=self.settings['ADPK'])
+                if nbr_pressure_AT_BT > 0:
+                    print("[INFO] Pressure outside the allowed range {}".format(nbr_pressure_AT_BT))
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
@@ -299,3 +327,11 @@ class DatabaseProcessing:
                 self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
             time.sleep(0.5)
+
+
+
+"""
+TODO
+* add function to check volume near 0 ==>> at the end of every cycle 
+* add function  to find the peak ==>> at the begining peak of the cycle 
+"""
