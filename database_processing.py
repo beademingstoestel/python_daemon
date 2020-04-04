@@ -190,7 +190,6 @@ class PressureMonitor:
         # send back teh peaks found
         return peaks
 
-
 class VolumeMonitor:
     def __init__(self, raw_data, median_kernel_size=11):
         super().__init__()
@@ -251,6 +250,19 @@ class VolumeMonitor:
             nbr_volume_deviate = sum(float(num) >= threshold_dv for num in dvolume_deviate_list)
         # return
         return nbr_volume_deviate, dvolume_deviate_list
+
+    # function to check volume near 0 ==>> at the end of every cycle 
+    # nbr_data_point from rising edge and going back
+    def detect_volume_not_near_zero_ebc(self, threshold_dv_zero=5, nbr_data_point=35):
+        # check volume near 0 ==>> at the end of every cycle 
+        volume_near_zero_list = []
+        for indice_bc in self.ppeaks[1:]:
+            min_volume = min(self.vvalues[indice_bc - nbr_data_point:indice_bc])
+            volume_near_zero_list.append(min_volume)
+        # nbr of time inhale or exhale duration is above the the threshold dt
+        nbr_volome_not_near_zero_ebc = sum(float(num) >= threshold_dv_zero for num in volume_near_zero_list)
+        # return
+        return nbr_volome_not_near_zero_ebc, volume_near_zero_list
 
     # find all the peaks that are in the signal
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
@@ -401,19 +413,19 @@ class DatabaseProcessing:
                     self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
                     self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
+                # function to check volume near 0 ==>> at the end of every cycle 
+                nbr_volome_not_near_zero_ebc, volume_near_zero_list = volume_monitor.detect_volume_not_near_zero_ebc(threshold_dv_zero=5, 
+                                                                                                                    nbr_data_point=35)
+                if nbr_volome_not_near_zero_ebc > 0:
+                    print("[INFO] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
+                    self.alarm_bits = self.alarm_bits | int('10000000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+
                 print("processing ", self.settings)
 
-
             except Exception as inst:
-                print('Exception occurred: ', inst)
-                self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
+                print('Exception occurred: ', inst)      # TODO check the alarm code below
+                self.alarm_bits = self.alarm_bits | int('11111111', 2)  # frank will define these bits, example for now 8-bit
                 self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
 
             time.sleep(0.5)
-
-
-
-"""
-TODO
-* add function to check volume near 0 ==>> at the end of every cycle 
-"""
