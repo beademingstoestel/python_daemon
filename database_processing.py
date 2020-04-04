@@ -18,13 +18,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 # import necessary packages
-import numpy as np
-from datetime import datetime, date, time, timedelta
-import scipy.signal as signal
-from scipy.signal import find_peaks
 import scipy
 import time
+import numpy as np
+import scipy.signal as signal
+import ventilator_protocol as proto
+from datetime import datetime, date, timedelta
 from pymongo import MongoClient, errors
+from scipy.signal import find_peaks
 
 """
 Notes
@@ -432,7 +433,7 @@ class DatabaseProcessing:
                 if breathing_cycle_per_minute > self.settings['RR']:
                     print("[WARNING] Breathing at {} per minute".format(breathing_cycle_per_minute))
                     self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # performance 'IE',   # Inspiration/Expiration (N for 1/N)
                 # in the function definition used as default values 2.75 / 10 seconds
@@ -441,12 +442,12 @@ class DatabaseProcessing:
                 if nbr_ratio_BT > 0:
                     print("[WARNING] # Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
                     self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 if nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
                     print("[WARNING] # inhale time above 10s : {} and # exhale time above 10s :{} ".format(nbr_dtinhale_AT, nbr_dtexhale_AT))
                     self.alarm_bits = self.alarm_bits | int('00000100', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # Pressure performance Tracking -- Peak Pressure PK and ADPK Allowed deviation Peak Pressure
                 # in the function defaults values are 51 / 3 / (5 for data points)
@@ -456,7 +457,7 @@ class DatabaseProcessing:
                 if nbr_dp_AT > 3:
                     print("[WARNING] # Pressure deviate during inhale {}".format(nbr_dp_AT))
                     self.alarm_bits = self.alarm_bits | int('00001000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # Pressure below peep value 'PP', # PEEP (positive end expiratory pressure) # 'ADPP', # Allowed deviation PEEP
                 # in the function defaults values are 10/5
@@ -466,7 +467,7 @@ class DatabaseProcessing:
                 if nbr_dp_peep_AT > 0:
                     print("[WARNING] # Pressure below peep level detected {}".format(nbr_dp_peep_AT))
                     self.alarm_bits = self.alarm_bits | int('00010000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
 
                 """
@@ -480,7 +481,7 @@ class DatabaseProcessing:
                 if nbr_pressure_overshoot_AT > 0:
                     print("[WARNING] Pressure peak overshoot {}".format(nbr_pressure_overshoot_AT))
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
                 """
 
                 # Detect when the pressure peak of breathing cycle is not in the allowed range defined
@@ -490,7 +491,7 @@ class DatabaseProcessing:
                 if nbr_pressure_AT_BT > 0:
                     print("[WARNING] # Pressure outside the allowed range {}".format(nbr_pressure_AT_BT))
                     self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
 
                 # desired volume VT / allowed deviation volume ADVT
@@ -500,7 +501,7 @@ class DatabaseProcessing:
                 if nbr_volume_AT_BT > 0:
                     print("[WARNING] # Volume outside the allowed range {}".format(nbr_volume_AT_BT))
                     self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # function to check volume near 0 ==>> at the end of every cycle
                 # TODO do we have in the settings a value for the threshold_dv_zero? if we need to find value 0 set then the threshold to 0
@@ -509,7 +510,7 @@ class DatabaseProcessing:
                 if nbr_volome_not_near_zero_ebc > 0:
                     print("[WARNING] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
                     self.alarm_bits = self.alarm_bits | int('10000000', 2)  # frank will define these bits, example for now 8-bit
-                    self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                    self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 print("*"*21)
                 print("[INFO] Processing Settnings", self.settings)
@@ -525,6 +526,6 @@ class DatabaseProcessing:
             except Exception as inst:
                 print('[WARNING] Exception occurred: ', inst)      # TODO check the alarm code below
                 self.alarm_bits = self.alarm_bits | int('11111111', 2)  # frank will define these bits, example for now 8-bit
-                self.alarm_queue.put({'type': 'error', 'val': self.alarm_bits})
+                self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
             time.sleep(0.5)
