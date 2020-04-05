@@ -66,8 +66,14 @@ class AlarmHandler():
                     self.time_last_kick_received == cur_time
                     if not self.first_watchdog_kick_received:
                         self.first_watchdog_kick_received = True
-                    if msg['val'] != 0:
-                        self.request_queue.put({'type': 'error', 'value': msg['val']})
+
+                    old_alarm = self.alarm_val
+                    self.alarm_val = msg['val']
+
+                    # don't wait on the watchdog kick to put the alarm on the serial queue.
+                    if (self.alarm_val > 0) and (old_alarm != self.alarm_val):
+                        self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
+                        self.request_queue.put({'type': 'error', 'value': self.alarm_val})
 
             # Have we received a watchdog kick in time?
             if self.first_watchdog_kick_received and ((cur_time - self.time_watchdog_kick_checked) > 3):
