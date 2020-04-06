@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import queue
 import time
+import ventilator_protocol as proto
 
 class RequestHandler:
     def __init__(self, api_client, request_queue):
@@ -38,8 +39,10 @@ class RequestHandler:
                 try:
                     if msg['type'] == 'setting':
                         self.api_client.send_setting_float(msg['key'], msg['value'])
-                    elif msg['type'] == 'error':
-                        self.api_client.send_error(msg['value'])
+                    elif msg['type'] == proto.alarm:
+                        self.api_client.send_alarm(msg['value'])
+                    elif msg['type'] == 'log':
+                        self.api_client.send_log(msg['value'])
                 except:
                     print("Invalid message from request")
 

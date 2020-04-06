@@ -26,6 +26,7 @@ import ventilator_protocol as proto
 from datetime import datetime, date, timedelta
 from pymongo import MongoClient, errors
 from scipy.signal import find_peaks
+from ventilator_alarm import AlarmBits
 
 """
 Notes
@@ -126,7 +127,7 @@ class PressureMonitor:
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
         all_peaks = np.sort(all_peaks)
-        dtime_inhale_exhale = np.diff(np.array(self.timestamp)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[all_peaks]) * 1e-3
+        dtime_inhale_exhale = np.diff(np.array(self.timestamp)[all_peaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[all_peaks]) * 1e-3
         # extract the dt for inhale and exhale
         dtime_inhale = dtime_inhale_exhale[0::2]
         dtime_exhale = dtime_inhale_exhale[1::2]
@@ -225,7 +226,7 @@ class PressureMonitor:
             TODO add return value explanation
         """
         # find all the peaks of the loaded breathing cycles
-        ind_max_pressure = find_peaks_signal(self.pvalues, 1, h=pressure_desired-threshold_dp, d=50)
+        ind_max_pressure = self.find_peaks_signal(self.pvalues, 1, h=pressure_desired-threshold_dp, d=50)
         if len(ind_max_pressure)==0:
             # No peak was found in the data loaded -->> rise an alarm !!!
             dpressure_deviate_list = None
@@ -309,7 +310,7 @@ class VolumeMonitor:
             TODO add return value explanation
         """
         # find all the peaks of the loaded breathing cycles
-        ind_max_volume = find_peaks_signal(self.vvalues, 1, h=volume_desired-threshold_dv, d=50)
+        ind_max_volume = self.find_peaks_signal(self.vvalues, 1, h=volume_desired-threshold_dv, d=50)
         if len(ind_max_volume)==0:
             # No peak was found in the data loaded -->> rise an alarm !!!
             dvolume_deviate_list = None
@@ -360,7 +361,7 @@ class DatabaseProcessing:
         self.settings = settings
         self.addr = addr
         self.alarm_queue = alarm_queue
-        self.alarm_bits = 0
+        self.alarm_bits = AlarmBits.NONE.value
         self.db = None
 
     def last_n_data(self, type_data, N=1000):
@@ -420,6 +421,8 @@ class DatabaseProcessing:
 
         while True:
             try:
+                self.alarm_bits = AlarmBits.NONE.value
+
                 data_p = self.last_n_data('PRES')
                 pressure_monitor = PressureMonitor(data_p)
                 data_v = self.last_n_data('VOL')
@@ -432,21 +435,21 @@ class DatabaseProcessing:
                 breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
                 if breathing_cycle_per_minute > self.settings['RR']:
                     print("[WARNING] Breathing at {} per minute".format(breathing_cycle_per_minute))
-                    self.alarm_bits = self.alarm_bits | int('00000001', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_ALARM_BPM_AT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # performance 'IE',   # Inspiration/Expiration (N for 1/N)
                 # in the function definition used as default values 2.75 / 10 seconds
-                nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['IE'],
+                nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['IE'],
                                                                                                             threshold_dt_ie=10)
-                if nbr_ratio_BT > 0:
-                    print("[WARNING] # Respiratory rate above threshold : {} ".format(nbr_ratio_BT))
-                    self.alarm_bits = self.alarm_bits | int('00000010', 2)  # frank will define these bits, example for now 8-bit
+                if nbr_ie_ratio_BT > 0:
+                    print("[WARNING] # Respiratory rate below threshold : {} ".format(nbr_ie_ratio_BT))
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_IE_RATIO_BT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 if nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
                     print("[WARNING] # inhale time above 10s : {} and # exhale time above 10s :{} ".format(nbr_dtinhale_AT, nbr_dtexhale_AT))
-                    self.alarm_bits = self.alarm_bits | int('00000100', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # Pressure performance Tracking -- Peak Pressure PK and ADPK Allowed deviation Peak Pressure
@@ -456,7 +459,7 @@ class DatabaseProcessing:
                                                                         nbr_data_point=5)
                 if nbr_dp_AT > 3:
                     print("[WARNING] # Pressure deviate during inhale {}".format(nbr_dp_AT))
-                    self.alarm_bits = self.alarm_bits | int('00001000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_DP_AT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # Pressure below peep value 'PP', # PEEP (positive end expiratory pressure) # 'ADPP', # Allowed deviation PEEP
@@ -466,7 +469,7 @@ class DatabaseProcessing:
                                                                                             nbr_data_point=35)
                 if nbr_dp_peep_AT > 0:
                     print("[WARNING] # Pressure below peep level detected {}".format(nbr_dp_peep_AT))
-                    self.alarm_bits = self.alarm_bits | int('00010000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_DP_PEEP_AT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
 
@@ -490,7 +493,7 @@ class DatabaseProcessing:
                                                                                                     threshold_dp=self.settings['ADPK'])
                 if nbr_pressure_AT_BT > 0:
                     print("[WARNING] # Pressure outside the allowed range {}".format(nbr_pressure_AT_BT))
-                    self.alarm_bits = self.alarm_bits | int('00100000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_AT_BT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
 
@@ -500,7 +503,7 @@ class DatabaseProcessing:
                                                                                                 threshold_dv=self.settings['ADVT'])
                 if nbr_volume_AT_BT > 0:
                     print("[WARNING] # Volume outside the allowed range {}".format(nbr_volume_AT_BT))
-                    self.alarm_bits = self.alarm_bits | int('01000000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_VOLUME_AT_BT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 # function to check volume near 0 ==>> at the end of every cycle
@@ -509,13 +512,13 @@ class DatabaseProcessing:
                                                                                                                     nbr_data_point=35)
                 if nbr_volome_not_near_zero_ebc > 0:
                     print("[WARNING] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
-                    self.alarm_bits = self.alarm_bits | int('10000000', 2)  # frank will define these bits, example for now 8-bit
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_VOLUME_NOT_NEAR_ZERO_EBC.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
                 print("*"*21)
                 print("[INFO] Processing Settnings", self.settings)
                 print("[INFO] BPM = {}".format(breathing_cycle_per_minute,))
-                print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
+                print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
                 print("[INFO] # pressure desired not reached ".format(nbr_dp_AT))
                 print("[INFO] # pressure below peep+dp = {} ".format(nbr_dp_peep_AT))
                 print("[INFO] # peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
@@ -525,7 +528,7 @@ class DatabaseProcessing:
 
             except Exception as inst:
                 print('[WARNING] Exception occurred: ', inst)      # TODO check the alarm code below
-                self.alarm_bits = self.alarm_bits | int('11111111', 2)  # frank will define these bits, example for now 8-bit
+                self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_EXCEPTION.value
                 self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits})
 
             time.sleep(0.5)

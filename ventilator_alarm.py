@@ -20,7 +20,34 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import queue
 import time
 import ventilator_protocol as proto
+from enum import Enum
 
+
+# BT: Below Threshold
+# AT Above Threshold
+
+class AlarmBits(Enum): #todo add more categories?
+    NONE                                                = int('00000000000000000000000000000000', 2)  #No alarm
+    DATABASE_PROCESSING_PRESSURE_BPM_AT                 = int('00000000000000000000000000000001', 2)  #Breathing per minute too high
+    DATABASE_PROCESSING_PRESSURE_IE_RATIO_BT            = int('00000000000000000000000000000010', 2)  #Respiratory rate below threshold
+    DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT = int('00000000000000000000000000000100', 2)   #inhale time above 10s and exhale time above 10s
+    DATABASE_PROCESSING_PRESSURE_DP_AT                  = int('00000000000000000000000000001000', 2)  #Pressure deviate during inhale
+    DATABASE_PROCESSING_PRESSURE_DP_PEEP_AT             = int('00000000000000000000000000010000', 2)  #Pressure below peep level detected
+    DATABASE_PROCESSING_PRESSURE_AT_BT                  = int('00000000000000000000000000100000', 2)  #Pressure outside the allowed range
+    DATABASE_PROCESSING_VOLUME_AT_BT                    = int('00000000000000000000000001000000', 2)  #Volume outside the allowed range
+    DATABASE_PROCESSING_VOLUME_NOT_NEAR_ZERO_EBC        = int('00000000000000000000000010000000', 2)  #Volume not near zero at the end of breathing cycle
+    DATABASE_PROCESSING_RESERVED1                       = int('00000000000000000000000100000000', 2)  #reserved1
+    DATABASE_PROCESSING_RESERVED2                       = int('00000000000000000000001000000000', 2)  #reserved2
+    DATABASE_PROCESSING_RESERVED3                       = int('00000000000000000000010000000000', 2)  #reserved3
+    DATABASE_PROCESSING_RESERVED4                       = int('00000000000000000000100000000000', 2)  #reserved4
+    DATABASE_PROCESSING_RESERVED5                       = int('00000000000000000001000000000000', 2)  #reserved5
+    DATABASE_PROCESSING_RESERVED6                       = int('00000000000000000010000000000000', 2)  #reserved6
+    DATABASE_PROCESSING_RESERVED7                       = int('00000000000000000100000000000000', 2)  #reserved7
+    DATABASE_PROCESSING_RESERVED8                       = int('00000000000000001000000000000000', 2)  #reserved8
+    DATABASE_PROCESSING_RESERVED9                       = int('00000000000000010000000000000000', 2)  #reserved9
+    DATABASE_PROCESSING_RESERVED10                      = int('00000000000000100000000000000000', 2)  #reserved10
+    DATABASE_PROCESSING_EXCEPTION                       = int('00000000000001000000000000000000', 2)  #In database processing an exception occurred
+    SERIAL_TIMEOUT                                      = int('10000000000000000000000000000000', 2)  #Serial communication timeout
 
 class AlarmHandler():
 
@@ -73,14 +100,14 @@ class AlarmHandler():
                     # don't wait on the watchdog kick to put the alarm on the serial queue.
                     if (self.alarm_val > 0) and (old_alarm != self.alarm_val):
                         self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
-                        self.request_queue.put({'type': 'error', 'value': self.alarm_val})
+                        self.request_queue.put({'type': proto.alarm, 'value': self.alarm_val})
 
             # Have we received a watchdog kick in time?
             if self.first_watchdog_kick_received and ((cur_time - self.time_watchdog_kick_checked) > 3):
                 self.time_watchdog_kick_checked = cur_time
                 # Send a watchdog error to the UI every 3 seconds if we lose connection
                 if (cur_time - self.time_last_kick_received > 3):
-                    self.request_queue.put({'type': 'error', 'value': 4}) # Error 4: connection timeout
+                    self.request_queue.put({'type': proto.alarm, 'value': self.alarm_val | AlarmBits.SERIAL_TIMEOUT.value}) # Error 4: connection timeout
 
             time.sleep(0.2)
 
