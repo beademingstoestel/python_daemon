@@ -385,6 +385,8 @@ class DatabaseProcessing:
             return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
         elif type_data == 'PRES':
             return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
+        elif type_data == 'TPRES':
+            return self.db.targetpressure_values.find().sort("loggedAt", -1).limit(N)
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None
@@ -402,6 +404,8 @@ class DatabaseProcessing:
             collection = self.db.trigger_values
         elif type_data == 'PRES':
             collection = self.db.pressure_values
+        elif type_data == 'TPRES':
+            collection = self.db.targetpressure_values
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None, None
