@@ -48,7 +48,6 @@ class SerialHandler():
             val (int): value to be sent
         """
         self.db_queue.put({'type': type, 'val': val})
-        self.alarm_queue.put({'type': type, 'val': val})
 
     def attempt_reconnection(self):
             self.ser = None

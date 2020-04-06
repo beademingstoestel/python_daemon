@@ -24,7 +24,7 @@ import ventilator_protocol as proto
 
 class AlarmHandler():
 
-    def __init__(self, input_queue, serial_queue, request_queue, settings):
+    def __init__(self, input_queue, serial_queue, request_queue):
         """
         Alarm Handler constructor
 
@@ -35,7 +35,6 @@ class AlarmHandler():
         self.input_queue = input_queue
         self.serial_queue = serial_queue
         self.request_queue = request_queue
-        self.settings = settings
 
         self.alarm_val = 0
 
@@ -46,7 +45,6 @@ class AlarmHandler():
 
         self.first_watchdog_kick_received = False
         self.start_time = 0
-
 
     def run(self, name):
         print("Starting {}".format(name))
@@ -64,12 +62,18 @@ class AlarmHandler():
                 msg = None
 
             if msg != None:
-                if msg['type'] == "ALARM":
+                if msg['type'] == proto.alarm:
                     self.time_last_kick_received == cur_time
                     if not self.first_watchdog_kick_received:
                         self.first_watchdog_kick_received = True
-                    if msg['val'] != 0:
-                        self.request_queue.put({'type': 'error', 'value': msg['val']})
+
+                    old_alarm = self.alarm_val
+                    self.alarm_val = msg['val']
+
+                    # don't wait on the watchdog kick to put the alarm on the serial queue.
+                    if (self.alarm_val > 0) and (old_alarm != self.alarm_val):
+                        self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
+                        self.request_queue.put({'type': 'error', 'value': self.alarm_val})
 
             # Have we received a watchdog kick in time?
             if self.first_watchdog_kick_received and ((cur_time - self.time_watchdog_kick_checked) > 3):
@@ -84,6 +88,4 @@ class AlarmHandler():
             if not self.first_watchdog_kick_received and ((cur_time - self.start_time) > 30):
                 #TODO: Raise watchdog timeout alarm.
                 pass
-
-            #print("alarm ", self.settings)
 
