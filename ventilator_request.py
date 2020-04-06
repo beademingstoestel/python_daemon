@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import requests
 import ventilator_protocol as proto
+from datetime import datetime
 
 class APIRequest():
 
@@ -44,5 +45,9 @@ class APIRequest():
         self.__put("/api/settings?returncomplete=false", {key:val})
 
     def send_alarm(self, val):
-        self.__put("/api/settings", {'value':val})
+        self.__put("/api/alarms", {'value':val})
+        return
+    
+    def send_log(self, severity, message):
+        self.__put("/api/logs", {'source':'python', 'text': message, 'severity': severity, 'loggedAt': datetime.utcnow()})
         return
