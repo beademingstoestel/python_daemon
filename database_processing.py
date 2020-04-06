@@ -414,7 +414,9 @@ class DatabaseProcessing:
         self.addr = addr
         self.alarm_queue = alarm_queue
         self.alarm_bits = AlarmBits.NONE.value
+        self.previous_alarm_bits = AlarmBits.NONE.value
         self.db = None
+        self.previous_mute_setting = 0
 
     def last_n_data(self, type_data, N=2000):
         """
@@ -568,14 +570,35 @@ class DatabaseProcessing:
                 if self.alarm_bits > 0:
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
                     #play an alarm
-                    if self.settings['MT']:
-                        print('play beep')
+                    print('play beep')
+                    if self.previous_alarm_bits == 0:
                         if self.sound_player.is_alive():
                             self.sound_player.terminate()
                             self.sound_player.join()
-
-                        self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
+                        self.sound_player = SoundPlayer('assets/beep.wav', -1, 0.200)
                         self.sound_player.start()
+                elif self.alarm_bits == 0 and self.previous_alarm_bits != 0:
+                    print('stop beep')
+                    if self.sound_player.is_alive():
+                        self.sound_player.terminate()
+                        self.sound_player.join()
+                
+                if self.settings['MT'] == 0 and self.previous_mute_setting != 0:
+                    print('play beep MT')
+                    if self.alarm_bits > 0:
+                        if self.sound_player.is_alive():
+                            self.sound_player.terminate()
+                            self.sound_player.join()
+                        self.sound_player = SoundPlayer('assets/beep.wav', -1, 0.200)
+                        self.sound_player.start()
+                elif self.settings['MT'] == 1 and self.previous_mute_setting == 0:
+                    print('stop beep MT')
+                    if self.sound_player.is_alive():
+                        self.sound_player.terminate()
+                        self.sound_player.join()
+                    
+                self.previous_mute_setting = self.settings['MT']
+                self.previous_alarm_bits = self.alarm_bits
 
                 print("*"*21)
                 print("[INFO] Processing Settings", self.settings)
