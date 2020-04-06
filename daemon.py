@@ -40,6 +40,7 @@ from ventilator_request_handler import RequestHandler
 from ventilator_setting_handler import SettingHandler
 from database_processing import DatabaseProcessing
 from datetime import datetime
+from ventilator_alarm import AlarmBits
 
 def run():
     """

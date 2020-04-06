@@ -27,6 +27,7 @@ from datetime import datetime, date, timedelta
 from pymongo import MongoClient, errors
 from scipy.signal import find_peaks
 from ventilator_alarm import AlarmBits
+from ventilator_sound import SoundPlayer
 
 """
 Notes
@@ -426,6 +427,8 @@ class DatabaseProcessing:
             print("[ERROR] Unable to connect, client will attempt to reconnect")
 
         self.db = self.client.beademing
+        
+        self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
 
         # TODO add a playing sound when a warning is valide !!!!
 
@@ -518,6 +521,15 @@ class DatabaseProcessing:
                    
                 if self.alarm_bits > 0:
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
+                    #play an alarm
+                    if self.settings['MT']:
+                        print('play beep')
+                        if self.sound_player.is_alive():
+                            self.sound_player.terminate()
+                            self.sound_player.join()
+
+                        self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
+                        self.sound_player.start()
 
                 print("*"*21)
                 print("[INFO] Processing Settings", self.settings)

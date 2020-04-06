@@ -19,7 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import time
 from threading import Thread
-from playsound import playsound
+import sounddevice as sd
+import soundfile as sf
 
 class SoundPlayer(Thread):
 
@@ -44,6 +45,10 @@ class SoundPlayer(Thread):
     def run(self):
         self.running = True
         while self.running and (self.repeats == -1 or self.repeat_cnt <= self.repeats):
-            playsound(self.sound_path)
+            data, fs = sf.read(self.sound_path, dtype='float32')
+            sd.play(data, fs)
+            status = sd.wait()
+            if status:
+                print('Error during playback: ' + str(status))
             self.repeat_cnt += 1
             time.sleep(self.sleep_duration)
