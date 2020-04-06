@@ -45,10 +45,13 @@ class SoundPlayer(Thread):
     def run(self):
         self.running = True
         while self.running and (self.repeats == -1 or self.repeat_cnt <= self.repeats):
-            data, fs = sf.read(self.sound_path, dtype='float32')
-            sd.play(data, fs)
-            status = sd.wait()
-            if status:
-                print('Error during playback: ' + str(status))
+            try:
+                data, fs = sf.read(self.sound_path, dtype='float32')
+                sd.play(data, fs)
+                status = sd.wait()
+                if status:
+                    print('Error during playback: ' + str(status))
+            except:
+                pass
             self.repeat_cnt += 1
             time.sleep(self.sleep_duration)

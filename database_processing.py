@@ -70,7 +70,7 @@ class PressureMonitor:
         self.timestamp.reverse()
         self.pvalues.reverse()
         self.tpres.reverse()
-
+        
         # median filter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
         pvalues_filtered = signal.medfilt(self.pvalues, median_kernel_size)
@@ -95,17 +95,26 @@ class PressureMonitor:
                 self.ppeaks.append(k)
             elif y[k]>0 and y[k+1]==0:
                 self.npeaks.append(k)
-
+        
+        print("PRESSURE"*3)
+        print(max(y))
+        print(self.ppeaks)
+        print(self.npeaks)
+        self.ppeaks = np.array(self.ppeaks)
+        self.npeaks = np.array(self.npeaks)
+        
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
         try:
             start_pp = self.ppeaks[0]
-            end_pp = self.ppeaks[-1]
+            end_pp  = self.ppeaks[-1]
+            print(start_pp, end_pp)
             # keep the falling edge in between
             self.npeaks = self.npeaks[self.npeaks > start_pp]
             self.npeaks = self.npeaks[self.npeaks < end_pp]
+            
         except:
-            raise Exception('no valid data or peaks detected')
+            raise Exception('pressure no valid data or peaks detected')
 
     def get_nbr_bpm(self):
         """
@@ -279,16 +288,16 @@ class VolumeMonitor:
     def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
-        self.vvalues, self.timestamp = [], []
+        self.vvalues, self.timestamp, self.tpres = [], [], []
         # send back data raw format + time stamp
         for x in (raw_data):
             self.vvalues.append(float(x.get('value')))
             full_time = x.get('loggedAt')
-            #tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
-            #    full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
-            self.timestamp.append(full_time.timestamp() * 1000)
-            #self.timestamp.append(tmp)
-
+            tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
+                full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
+            # self.timestamp.append(full_time.timestamp() * 1000)
+            self.timestamp.append(tmp)
+        
         # load the TPRES signal data 
         for x in (data_TPRES):
             self.tpres.append(float(x.get('value')))
@@ -298,7 +307,7 @@ class VolumeMonitor:
         self.timestamp.reverse()
         self.vvalues.reverse()
         self.tpres.reverse()
-
+               
         # median fileter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
         vvalues_filtered = signal.medfilt(self.vvalues, median_kernel_size)
@@ -314,7 +323,7 @@ class VolumeMonitor:
         self.ppeaks = self.find_peaks_signal(d_volume, +1, h=100, d=50)
         # get the location of falling edge
         self.npeaks = self.find_peaks_signal(d_volume, -1, h=100, d=50)
-
+        
         # find the peaks using the TPRES signal 
         self.ppeaks, self.npeaks = [], []
         y = np.array(self.tpres)
@@ -323,17 +332,25 @@ class VolumeMonitor:
                 self.ppeaks.append(k)
             elif y[k]>0 and y[k+1]==0:
                 self.npeaks.append(k)
-                
+        
+        print("VOLUME"*3)
+        # print(max(y))
+        print(self.ppeaks)
+        print(self.npeaks)
+        
+        self.ppeaks = np.array(self.ppeaks)
+        self.npeaks = np.array(self.npeaks)
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
         try:
             start_pp = self.ppeaks[0]
             end_pp = self.ppeaks[-1]
+            print(start_pp, end_pp)
             # keep the falling edge in between
             self.npeaks = self.npeaks[self.npeaks > start_pp]
             self.npeaks = self.npeaks[self.npeaks < end_pp]
         except:
-            raise Exception('no valid data or peaks detected')
+            raise Exception('volume no valid data or peaks detected')
 
     def volume_peak_too_low_high(self, volume_desired=150, threshold_dv=30):
         """
@@ -467,7 +484,7 @@ class DatabaseProcessing:
 
                 data_p, data_TPRES = self.last_n_data('PRES')
                 pressure_monitor = PressureMonitor(data_p, data_TPRES)
-                data_v, _ = self.last_n_data('VOL')
+                data_v, data_TPRES = self.last_n_data('VOL')
                 volume_monitor   = VolumeMonitor(data_v, data_TPRES)
 
                 # BT: Below Threshold
