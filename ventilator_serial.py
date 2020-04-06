@@ -25,6 +25,7 @@ import time
 import ventilator_protocol as proto
 import time
 import traceback
+from datetime import datetime
 
 
 class SerialHandler():
@@ -39,7 +40,7 @@ class SerialHandler():
         self.alarm_queue = alarm_queue
         self.message_id = 0
 
-    def queue_put(self, type, val):
+    def queue_put(self, type, val, loggedAt):
         """
         Send values to all necessary queues
 
@@ -47,7 +48,7 @@ class SerialHandler():
             type (str): type to be sent
             val (int): value to be sent
         """
-        self.db_queue.put({'type': type, 'val': val})
+        self.db_queue.put({'type': type, 'val': val, 'loggedAt': loggedAt})
 
     def attempt_reconnection(self):
             self.ser = None
@@ -133,7 +134,7 @@ class SerialHandler():
                 
                 if line.startswith(proto.alarm + '='):
                     val = tokens[1]
-                    self.alarm_queue.put({'type': 'ALARM', 'val': val})
+                    self.alarm_queue.put({'type': 'ALARM', 'val': int(float(val)), 'source': 'serial'})
                     # acknowledge receipt
                     print('Send ACK for id: {}'.format(id))
 
@@ -149,7 +150,7 @@ class SerialHandler():
                 for msgtype in proto.measurements:
                     if line.startswith((msgtype + '=')):
                         val = tokens[1]
-                        self.queue_put(msgtype, val)
+                        self.queue_put(msgtype, val, datetime.utcnow())
 
                 # handle settings
                 for msgtype in proto.settings:

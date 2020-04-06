@@ -31,34 +31,39 @@ class DbClient():
         self.db = None
         self.queue = db_queue
 
-    def store_pressure(self, pressure_val):
+    def store_pressure(self, msg):
         collection = self.db.pressure_values
         print('store_pressure')
-        self.__store_value(collection, pressure_val)
+        self.__store_value(collection, msg)
+        
+    def store_target_pressure(self, msg):
+        collection = self.db.targetpressure_values
+        print('store_target_pressure')
+        self.__store_value(collection, msg)
 
-    def store_volume(self, volume_val):
+    def store_volume(self, msg):
         collection = self.db.volume_values
-        self.__store_value(collection, volume_val)
+        self.__store_value(collection, msg)
 
-    def store_bpm(self, breaths_per_minute_val):
+    def store_bpm(self, msg):
         collection = self.db.breathsperminute_values
-        self.__store_value(collection, breaths_per_minute_val)
+        self.__store_value(collection, msg)
 
-    def store_trigger(self, trigger_val):
+    def store_trigger(self, msg):
         collection = self.db.trigger_values
-        self.__store_value(collection, trigger_val)
+        self.__store_value(collection, msg)
 
-    def store_flow(self, flow_val):
+    def store_flow(self, msg):
         collection = self.db.flow_values
-        self.__store_value(collection, flow_val)
+        self.__store_value(collection, msg)
 
-    def store_cpu(self, cpu_val):
+    def store_cpu(self, msg):
         collection = self.db.cpu_values
-        self.__store_value(collection, cpu_val)
+        self.__store_value(collection, msg)
 
-    def __store_value(self, collection, val):
+    def __store_value(self, collection, msg):
         try:
-            collection.insert_one({'value': val, 'loggedAt': datetime.utcnow()})
+            collection.insert_one({'value': msg['val'], 'loggedAt': msg['loggedAt']})
         except errors.ConnectionFailure:
             print("Lost connection, client will attempt to reconnect")
 
@@ -81,16 +86,18 @@ class DbClient():
                 continue
             try:
                 if msg['type'] == 'BPM':
-                    self.store_bpm(msg['val'])
+                    self.store_bpm(msg)
                 elif msg['type'] == 'VOL':
-                    self.store_volume(msg['val'])
+                    self.store_volume(msg)
                 elif msg['type'] == 'TRIG':
-                    self.store_trigger(msg['val'])
+                    self.store_trigger(msg)
                 elif msg['type'] == 'PRES':
-                    self.store_pressure(msg['val'])
+                    self.store_pressure(msg)
+                elif msg['type'] == 'TPRES':
+                    self.store_target_pressure(msg)
                 elif msg['type'] == 'FLOW':
-                    self.store_flow(msg['val'])
+                    self.store_flow(msg)
                 elif msg['type'] == 'CPU':
-                    self.store_cpu(msg['val'])
+                    self.store_cpu(msg)
             except:
                 print("Invalid message from database")

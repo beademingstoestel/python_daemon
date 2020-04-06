@@ -27,6 +27,7 @@ measurements = ['BPM',  # Breaths per minute
                 'VOL',  # Volume
                 'TRIG', # Trigger
                 'PRES', # Pressure
+                'TPRES', # Target pressure
                 'FLOW', # Liters/min
                 'CPU'   # CPU usage
 ]

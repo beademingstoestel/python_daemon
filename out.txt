@@ -1,0 +1,2 @@
+Send setting to server, set to {'startPythonDaemon': datetime.datetime(2020, 4, 2, 13, 28, 33, 948223)}
+Starting db thread

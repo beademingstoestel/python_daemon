@@ -45,7 +45,7 @@ class APIRequest():
         self.__put("/api/settings?returncomplete=false", {key:val})
 
     def send_alarm(self, val):
-        self.__put("/api/alarms", {'value':val})
+        self.__put("/api/alarms", {'value':int(val)})
         return
     
     def send_log(self, severity, message):

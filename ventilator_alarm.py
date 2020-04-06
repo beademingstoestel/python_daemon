@@ -30,7 +30,7 @@ class AlarmBits(Enum): #todo add more categories?
     NONE                                                = int('00000000000000000000000000000000', 2)  #No alarm
     DATABASE_PROCESSING_PRESSURE_BPM_AT                 = int('00000000000000000000000000000001', 2)  #Breathing per minute too high
     DATABASE_PROCESSING_PRESSURE_IE_RATIO_BT            = int('00000000000000000000000000000010', 2)  #Respiratory rate below threshold
-    DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT = int('00000000000000000000000000000100', 2)   #inhale time above 10s and exhale time above 10s
+    DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT  = int('00000000000000000000000000000100', 2)   #inhale time above 10s and exhale time above 10s
     DATABASE_PROCESSING_PRESSURE_DP_AT                  = int('00000000000000000000000000001000', 2)  #Pressure deviate during inhale
     DATABASE_PROCESSING_PRESSURE_DP_PEEP_AT             = int('00000000000000000000000000010000', 2)  #Pressure below peep level detected
     DATABASE_PROCESSING_PRESSURE_AT_BT                  = int('00000000000000000000000000100000', 2)  #Pressure outside the allowed range
@@ -89,17 +89,19 @@ class AlarmHandler():
                 msg = None
 
             if msg != None:
+                print(msg)
                 if msg['type'] == proto.alarm:
-                    self.time_last_kick_received == cur_time
-                    if not self.first_watchdog_kick_received:
-                        self.first_watchdog_kick_received = True
+                    if msg['source'] == 'serial':
+                        self.time_last_kick_received == cur_time
+                        if not self.first_watchdog_kick_received:
+                            self.first_watchdog_kick_received = True
 
                     old_alarm = self.alarm_val
                     self.alarm_val = msg['val']
 
                     # don't wait on the watchdog kick to put the alarm on the serial queue.
                     if (self.alarm_val > 0) and (old_alarm != self.alarm_val):
-                        self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
+                        #self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
                         self.request_queue.put({'type': proto.alarm, 'value': self.alarm_val})
 
             # Have we received a watchdog kick in time?

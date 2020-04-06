@@ -41,7 +41,7 @@ class SettingHandler:
                     key = msg['type']
                     value = msg['val']
                     if key in proto.settings:
-                        self.settings[key] = value
+                        self.settings[key] = float(value)
                         print(self.settings)
                 except:
                     print("Invalid message")
