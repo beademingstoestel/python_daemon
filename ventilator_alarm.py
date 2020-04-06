@@ -28,7 +28,7 @@ from enum import Enum
 
 class AlarmBits(Enum): #todo add more categories?
     NONE                                                = int('00000000000000000000000000000000', 2)  #No alarm
-    DATABASE_PROCESSING_PRESSURE_BPM_AT                 = int('00000000000000000000000000000001', 2)  #Breathing per minute too high
+    DATABASE_PROCESSING_PRESSURE_BPM_BT                 = int('00000000000000000000000000000001', 2)  #Breathing per minute too low
     DATABASE_PROCESSING_PRESSURE_IE_RATIO_BT            = int('00000000000000000000000000000010', 2)  #Respiratory rate below threshold
     DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT  = int('00000000000000000000000000000100', 2)   #inhale time above 10s and exhale time above 10s
     DATABASE_PROCESSING_PRESSURE_DP_AT                  = int('00000000000000000000000000001000', 2)  #Pressure deviate during inhale

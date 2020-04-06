@@ -443,9 +443,9 @@ class DatabaseProcessing:
 
                 # BPM - # Respiratory rate (RR)
                 breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
-                if breathing_cycle_per_minute > self.settings['RR']:
+                if breathing_cycle_per_minute < self.settings['RR']:
                     print("[WARNING] Breathing at {} per minute".format(breathing_cycle_per_minute))
-                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_ALARM_BPM_AT.value
+                    self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_ALARM_BPM_BT.value
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
 
                 # performance 'IE',   # Inspiration/Expiration (N for 1/N)
@@ -526,7 +526,7 @@ class DatabaseProcessing:
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
 
                 print("*"*21)
-                print("[INFO] Processing Settnings", self.settings)
+                print("[INFO] Processing Settings", self.settings)
                 print("[INFO] BPM = {}".format(breathing_cycle_per_minute,))
                 print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
                 print("[INFO] # pressure desired not reached {}".format(nbr_dp_AT))
