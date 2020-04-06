@@ -48,10 +48,10 @@ class PressureMonitor:
         * as setpoint are not availble yet!!! this check is done in a different way:
             == at the end of the inhale period the pressure values are compared to the desired pressure value
     """
-    def __init__(self, raw_data, median_kernel_size=11):
+    def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
-        self.pvalues, self.timestamp = [], []
+        self.pvalues, self.timestamp, self.tpres = [], [], []
         # send back data raw format + time stamp
         for x in (raw_data):
             self.pvalues.append(float(x.get('value')))
@@ -60,11 +60,15 @@ class PressureMonitor:
             #    full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
             self.timestamp.append(full_time.timestamp() * 1000)
             #self.timestamp.append(tmp)
+        # load the TPRES signal data 
+        for x in (data_TPRES):
+            self.tpres.append(float(x.get('value')))
 
         # reverse the order of the element because they are retrieved 
         # in reverse order from the Mongo database
         self.timestamp.reverse()
         self.pvalues.reverse()
+        self.tpres.reverse()
 
         # median filter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
@@ -81,6 +85,15 @@ class PressureMonitor:
         self.ppeaks = self.find_peaks_signal(d_pressure, +1, h=100, d=50)
         # get the location of falling edge
         self.npeaks = self.find_peaks_signal(d_pressure, -1, h=100, d=50)
+
+        # find the peaks using the TPRES signal 
+        self.ppeaks, self.npeaks = [], []
+        y = np.array(self.tpres)
+        for k in range(0,len(y)-1):
+            if y[k]==0 and y[k+1]>0:
+                self.ppeaks.append(k)
+            elif y[k]>0 and y[k+1]==0:
+                self.npeaks.append(k)
 
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
@@ -262,7 +275,7 @@ class VolumeMonitor:
     1) Not tested  -- peak volume per breathing cycle and check if it is in the allowed range [Vset-dv : Vset+dv]
     2) Not tested  -- check if the volume goes near zero at the end of each breathing cycle
     """
-    def __init__(self, raw_data, median_kernel_size=11):
+    def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
         self.vvalues, self.timestamp = [], []
@@ -270,14 +283,20 @@ class VolumeMonitor:
         for x in (raw_data):
             self.vvalues.append(float(x.get('value')))
             full_time = x.get('loggedAt')
-            tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
-                full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
-            self.timestamp.append(tmp)
+            #tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
+            #    full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
+            self.timestamp.append(full_time.timestamp() * 1000)
+            #self.timestamp.append(tmp)
+
+        # load the TPRES signal data 
+        for x in (data_TPRES):
+            self.tpres.append(float(x.get('value')))
 
         # reverse the order of the element because they are retrieved 
         # in reverse order from the Mongo database
         self.timestamp.reverse()
         self.vvalues.reverse()
+        self.tpres.reverse()
 
         # median fileter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
@@ -295,6 +314,15 @@ class VolumeMonitor:
         # get the location of falling edge
         self.npeaks = self.find_peaks_signal(d_volume, -1, h=100, d=50)
 
+        # find the peaks using the TPRES signal 
+        self.ppeaks, self.npeaks = [], []
+        y = np.array(self.tpres)
+        for k in range(0,len(y)-1):
+            if y[k]==0 and y[k+1]>0:
+                self.ppeaks.append(k)
+            elif y[k]>0 and y[k+1]==0:
+                self.npeaks.append(k)
+                
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
         try:
@@ -377,19 +405,20 @@ class DatabaseProcessing:
         Returns:
             TODO add return value explanation
         """
+        data_TPRES = self.db.targetpressure_values.find().sort("loggedAt", -1).limit(N) 
         if type_data == 'BPM':
-            return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N)
+            return self.db.breathsperminute_values.find().sort("loggedAt", -1).limit(N), data_TPRES 
         elif type_data == 'VOL':
-            return self.db.volume_values.find().sort("loggedAt", -1).limit(N)
+            return self.db.volume_values.find().sort("loggedAt", -1).limit(N), data_TPRES 
         elif type_data == 'TRIG':
-            return self.db.trigger_values.find().sort("loggedAt", -1).limit(N)
+            return self.db.trigger_values.find().sort("loggedAt", -1).limit(N), data_TPRES 
         elif type_data == 'PRES':
-            return self.db.pressure_values.find().sort("loggedAt", -1).limit(N)
+            return self.db.pressure_values.find().sort("loggedAt", -1).limit(N), data_TPRES 
         elif type_data == 'TPRES':
-            return self.db.targetpressure_values.find().sort("loggedAt", -1).limit(N)
+            return self.db.targetpressure_values.find().sort("loggedAt", -1).limit(N), None
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
-            return None
+            return None, None
 
     def last_n_values(self, type_data, N=1000):
         """
@@ -433,10 +462,10 @@ class DatabaseProcessing:
             try:
                 self.alarm_bits = AlarmBits.NONE.value
 
-                data_p = self.last_n_data('PRES')
-                pressure_monitor = PressureMonitor(data_p)
-                data_v = self.last_n_data('VOL')
-                volume_monitor   = VolumeMonitor(data_v)
+                data_p, data_TPRES = self.last_n_data('PRES')
+                pressure_monitor = PressureMonitor(data_p, data_TPRES)
+                data_v, _ = self.last_n_data('VOL')
+                volume_monitor   = VolumeMonitor(data_v, data_TPRES)
 
                 # BT: Below Threshold
                 # AT Above Threshold
