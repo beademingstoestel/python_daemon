@@ -16,20 +16,25 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Store the received settings in a dictionary
+
 """
 import queue
 import time
 import ventilator_protocol as proto
+import ventilator_log as log
 
-#store the recevied settings in a dictonary
 
 class SettingHandler:
-    def __init__(self, serial_queue, settings):
+    def __init__(self, serial_queue, request_queue, settings):
         self.serial_queue = serial_queue
         self.settings = settings
+        self.request_queue = request_queue
 
     def run(self, name):
         print('Starting {}'.format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
         while True:
             try:
                 msg = self.serial_queue.get(block=False)
@@ -43,7 +48,10 @@ class SettingHandler:
                     if key in proto.settings:
                         self.settings[key] = float(value)
                         print(self.settings)
-                except:
-                    print("Invalid message")
+                except Exception as e:
+                    print("Invalid message {}".format(msg))
+                    log.ERROR(__name__, self.request_queue, "Invalid message {}".format(msg))
+                    print(e)
+                    log.ERROR(__name__, self.request_queue, "Exception occurred {}".format(e))
 
             time.sleep(0.2)

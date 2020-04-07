@@ -24,7 +24,7 @@ import asyncio
 import websockets
 import ventilator_protocol as proto
 from ventilator_sound import SoundPlayer
-
+import ventilator_log as log
 
 class WebsocketHandler():
 
@@ -73,6 +73,7 @@ class WebsocketHandler():
 
     def run(self, name):
         print("Starting {}".format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
 
         self.ws = websocket.WebSocket()
         self.ws.connect(self.url)
@@ -95,7 +96,9 @@ class WebsocketHandler():
                         self.handle_settings(payload)
             except Exception as e:
                 print("Invalid message from websockets {}".format(json_msg))
+                log.ERROR(__name__, self.request_queue, "Invalid message from websockets {}".format(json_msg))
                 print(e)
+                log.ERROR(__name__, self.request_queue, "Exception occurred {}".format(e))
 
     def attempt_reconnect(self):
         while True:
@@ -106,11 +109,12 @@ class WebsocketHandler():
             except:
                 continue
 
-    def __init__(self, serial_queue, setting_queue, addr='localhost', port=3001):
+    def __init__(self, serial_queue, setting_queue, request_queue, addr='localhost', port=3001):
         self.url = "ws://" + addr + ":" + str(port) + "/"
         self.id = 1
         self.serial_queue = serial_queue
         self.setting_queue = setting_queue
+        self.request_queue = request_queue
 
 if __name__ == "__main__":
     ws = WebsocketHandler()

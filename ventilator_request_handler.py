@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import queue
 import time
 import ventilator_protocol as proto
+import ventilator_log as log #don't call here the log functions but use rather directly the send_log functions
 
 class RequestHandler:
     def __init__(self, api_client, request_queue):
@@ -29,6 +30,7 @@ class RequestHandler:
 
     def run(self, name):
         print('Starting {}'.format(name))
+        self.api_client.send_log(log.LOG_LEVEL_INFO, '{} - Starting {}'.format(__name__, name))
         while True:
             try:
                 msg = self.request_queue.get(block=False)
@@ -37,13 +39,16 @@ class RequestHandler:
 
             if msg != None:
                 try:
-                    if msg['type'] == 'setting':
+                    if msg['type'] == proto.setting:
                         self.api_client.send_setting_float(msg['key'], msg['value'])
                     elif msg['type'] == proto.alarm:
                         self.api_client.send_alarm(msg['value'])
-                    elif msg['type'] == 'log':
-                        self.api_client.send_log(msg['value'])
-                except:
-                    print("Invalid message from request")
+                    elif msg['type'] == proto.log:
+                        self.api_client.send_log(msg['severity'], msg['value'])
+                except Exception as e:
+                    print("Invalid message from request = {}".format(msg))
+                    self.api_client.send_log(log.LOG_LEVEL_ERROR, "{} - Invalid message from request = {}".format(__name__, msg))
+                    print(e)
+                    self.api_client.send_log(log.LOG_LEVEL_ERROR, "{} - Exception occurred {}".format(__name__, e))
 
             time.sleep(0.01)

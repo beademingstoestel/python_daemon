@@ -23,6 +23,7 @@ import time
 import numpy as np
 import scipy.signal as signal
 import ventilator_protocol as proto
+import ventilator_log as log
 from datetime import datetime, date, timedelta
 from pymongo import MongoClient, errors
 from scipy.signal import find_peaks
@@ -375,6 +376,8 @@ class PressureMonitor:
         else:
             peaks = None
             print("[WARNING] sign should be either +1 or -1")
+            log.WARNING(self.request_queue, "sign should be either +1 or -1")
+
         # send back teh peaks found
         return peaks
 
@@ -559,14 +562,16 @@ class VolumeMonitor:
         else:
             peaks = None
             print("[WARNING] sign should be either +1 or -1")
+            log.WARNING(self.request_queue, "sign should be either +1 or -1")
         # send back teh peaks found
         return peaks
 
 class DatabaseProcessing:
-    def __init__(self, settings, alarm_queue, addr='mongodb://localhost:27017'):
+    def __init__(self, settings, alarm_queue, request_queue, addr='mongodb://localhost:27017'):
         self.settings = settings
         self.addr = addr
         self.alarm_queue = alarm_queue
+        self.request_queue = request_queue
         self.alarm_bits = AlarmBits.NONE.value
         self.previous_alarm_bits = AlarmBits.NONE.value
         self.db = None
@@ -592,6 +597,7 @@ class DatabaseProcessing:
             return self.db.targetpressure_values.find().sort("loggedAt", -1).limit(N), None
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            log.ERROR(__name__, self.request_queue, "value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None, None
 
     def last_n_values(self, type_data, N=1000):
@@ -611,6 +617,7 @@ class DatabaseProcessing:
             collection = self.db.targetpressure_values
         else:
             print("[ERROR] value type not recognized use: BPM, VOL, TRIG, or PRES")
+            log.ERROR(__name__, self.request_queue, "value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None, None
         # send back data raw format + time stamp
         data_raw = collection.find().sort("loggedAt", -1).limit(N)
@@ -621,12 +628,15 @@ class DatabaseProcessing:
 
     def run(self, name):
         print("[INFO] Starting {}".format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
+
         # Only start MongoClient after fork()
         # and each child process should have its own instance of the client
         try:
             self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
             print("[ERROR] Unable to connect, client will attempt to reconnect")
+            log.ERROR(__name__, self.request_queue, "Unable to connect, client will attempt to reconnect")
 
         self.db = self.client.beademing
         
@@ -767,8 +777,8 @@ class DatabaseProcessing:
 
                 print("*"*21)
                 print("[INFO] Processing Settings", self.settings)
-                print("[INFO - OK] BPM = {}".format(breathing_cycle_per_minute,))
-                # print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
+                print("[INFO] BPM = {}".format(breathing_cycle_per_minute))
+                print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
                 print("[INFO] # pressure desired not reached {}".format(nbr_dp_AT))
                 print("[INFO] # pressure below peep+dp = {} ".format(nbr_dp_peep_AT))
                 print("[INFO - OK] # peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
@@ -779,9 +789,18 @@ class DatabaseProcessing:
                 print("*"*21)
                 print("alarm_bits ", hex(self.alarm_bits))
 
-            except Exception as inst:
+                log.INFO(__name__, self.request_queue, "BPM = {}".format(breathing_cycle_per_minute))
+                log.INFO(__name__, self.request_queue, "# IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
+                log.INFO(__name__, self.request_queue, "# pressure desired not reached {}".format(nbr_dp_AT))
+                log.INFO(__name__, self.request_queue, "# pressure below peep+dp = {} ".format(nbr_dp_peep_AT))
+                log.INFO(__name__, self.request_queue, "# peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
+                log.INFO(__name__, self.request_queue, "# peak volume not in allowed range = {}".format(nbr_volume_AT_BT))
+                log.INFO(__name__, self.request_queue, "# volume not near zero at ebc = {} ".format(nbr_volome_not_near_zero_ebc))
+
+            except Exception as e:
                 print("[INFO] Processing Settings", self.settings)
-                print('[WARNING] Exception occurred: ', inst)      # TODO check the alarm code below
+                print('[WARNING] Exception occurred: ', e)
+                log.ERROR(__name__, self.request_queue, "Exception occurred = {}".format(e))
                 self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_EXCEPTION.value
                 self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
 
