@@ -52,15 +52,12 @@ class PressureMonitor:
     """
     def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
-        # raw_data from the Mongo database
         self.pvalues, self.timestamp, self.tpres, self.timetpres = [], [], [], []
-        # send back data raw format + time stamp
         for x in (raw_data):
             self.pvalues.append(float(x.get('value')))
             full_time = x.get('loggedAt')            
             self.timestamp.append(full_time.timestamp() * 1000)
             
-        # load the TPRES signal data 
         for x in (data_TPRES):
             self.tpres.append(float(x.get('value')))
             full_time = x.get('loggedAt')            
@@ -72,25 +69,7 @@ class PressureMonitor:
         self.pvalues.reverse()
         self.tpres.reverse()
         self.timetpres.reverse()
-        
-        """
-        # median filter size = median_kernel_size
-        # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
-        pvalues_filtered = signal.medfilt(self.pvalues, median_kernel_size)
-        # compute the first derivative of the pressure signal
-        d_pressure = np.zeros(pvalues_filtered.shape, np.float)
-        d_pressure[0:-1] = np.diff(pvalues_filtered) / (np.diff(self.timestamp) * 1e-3)
-        d_pressure[-1] = (pvalues_filtered[-1] - pvalues_filtered[-2]) / (self.timestamp[-1] - self.timestamp[-2])
-
-        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
-        # TODO h/d value could be defined as parameters to read from the config file!!
-        # TODO check if we need to adjust the distance between peaks
-        # get the location of rising edge
-        self.ppeaks = self.find_peaks_signal(d_pressure, +1, h=100, d=50)
-        # get the location of falling edge
-        self.npeaks = self.find_peaks_signal(d_pressure, -1, h=100, d=50)
-        """
-        
+            
         # find the peaks using the TPRES signal 
         self.ppeaks, self.npeaks = [], []
         y = np.array(self.tpres)
@@ -381,6 +360,63 @@ class PressureMonitor:
         # send back teh peaks found
         return peaks
 
+    def get_IE(self):
+        """
+        this function used the already loaded pressure reference data, and calculates in the full window of this data how many inhale and exhale cycles there were and especially how long these took, to calculate the average IE ratio
+                                
+                                Args:
+            none (function uses only the data stored in self.ppeaks and self.npeaks defined elsewhere)
+        Returns:
+            average IE ratio as observed in the data 
+        """
+        # assumed we have self.ppeaks and self.npeaks ON TARGET PRESSURE !!! 
+        # and that timetpres is vector with timestamps at same times at ppeaks and npeaks
+        # critical question: now we use the full window, do we want to take a subset? like one minute?
+        # combine both list of peaks to measure the Ti and Te
+        all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
+        all_peaks = np.sort(all_peaks)
+        dtime_inhale_exhale = np.diff(np.array(self.timetpres)[all_peaks.astype(int)])
+                                # note: these is in samples, but since we take the ratio this is not important!
+        # extract the dt for inhale and exhale
+        dtime_inhale = dtime_inhale_exhale[0::2]  
+        dtime_exhale = dtime_inhale_exhale[1::2]
+        # full number of cycles present in data record (in case of incomplete cycles)
+        nbr_ele = min(len(dtime_inhale), len(dtime_exhale))
+        dtime_inhale = dtime_inhale[:nbr_ele]
+        dtime_exhale = dtime_exhale[:nbr_ele]
+        # compute the ratio exhale/inhale (this are still multiple values) 
+        ratio_exhale_inhale = dtime_exhale / dtime_inhale
+        # find the average IE to return 
+        average_IE = np.mean(ratio_exhale_inhale)
+        # return
+        return average_IE
+
+    def get_PressurePlateau(self): 
+        """
+        this function used the already loaded pressure measurements, and calculates in the window of this data how much the pressure plateau is during the inhale cycles (the part after the peak pressure occurs). then we calculate the average plateau over all the cycles in this window of data
+                                
+                                Args:
+            none (function uses only the data stored in self.pvalues, self.ppeaks and self.npeaks defined elsewhere)
+        Returns:
+            average pressure plateau as observed in the data 
+        """
+        avg_pressure_per_cycle = []
+        for k in range(0,len(self.ppeaks)-1):
+            # define part from inhale to exhale 
+            inhale_pressure = np.array(self.pvalues[self.ppeaks[k]:self.npeaks[k]])
+            # find pressure peak location                      
+            maxind = np.where(inhale_pressure == np.amax(inhale_pressure)) 
+            # now look for average from after peak to the end 
+            if len(maxind)==0:
+                # no peak found, mysterious but simply do not include in list for avg
+                print("Bruno Bug")
+            else:
+                # take a small offset on max pressure (hardcoded here)
+                avg_pressure_per_cycle.append(np.mean(np.array(self.pvalues[maxind[0]+6:self.npeaks[k]])))
+        # now take the average 
+        average_PressurePlateau = np.mean(avg_pressure_per_cycle)
+        return average_PressurePlateau
+
 class VolumeMonitor:
     """
     get the recorded volume values and compute the following:
@@ -566,6 +602,33 @@ class VolumeMonitor:
         # send back teh peaks found
         return peaks
 
+    def get_TidalVolume_lastMinute(self):
+        """
+        This function returns the total tidal volume of the data as observed over the already built record of data
+                                
+        Args:
+            none (function uses only the data stored in self.vvalues defined elsewhere)
+        Returns:
+            average tidal volume as observed in the data 
+        """ 
+        # TODO: make this works for last minute only!!                         
+        time_inhale = (np.array(self.timetpres)[self.ppeaks.astype(int)])
+        time_exhale = (np.array(self.timetpres)[self.npeaks.astype(int)])
+
+        total_TV_ml = 0
+        for k in range(0,len(self.ppeaks)-1):
+            # find volume time just above the inhale time 
+            indscycle = np.argwhere(self.timestamp > time_inhale[k] and self.timestamp< time_exhale[k])
+            if len(indscycle)==0:
+                # No peak was found in the data loaded -->> rise an alarm !!!
+                continue
+            else:
+                total_TV_ml = total_TV_ml + np.amax(self.vvalues[indscycle])
+        
+        VolumeLastMinute = 60 * total_TV_ml/( (time_inhale[-1]-time_inhale[0]) / 1e3)
+
+        return VolumeLastMinute
+
 class DatabaseProcessing:
     def __init__(self, settings, alarm_queue, request_queue, addr='mongodb://localhost:27017'):
         self.settings = settings
@@ -577,7 +640,7 @@ class DatabaseProcessing:
         self.db = None
         self.previous_mute_setting = 0
 
-    def last_n_data(self, type_data, N=1000):
+    def last_n_data(self, type_data, N=1200):
         """
         retrieve the last "N" added measurement N = 1000
 
@@ -600,7 +663,7 @@ class DatabaseProcessing:
             log.ERROR(__name__, self.request_queue, "value type not recognized use: BPM, VOL, TRIG, or PRES")
             return None, None
 
-    def last_n_values(self, type_data, N=1000):
+    def last_n_values(self, type_data, N=1200):
         """
         retrieve the last "N" added measurement N = 1000
         """
@@ -775,6 +838,10 @@ class DatabaseProcessing:
                 self.previous_mute_setting = self.settings['MT']
                 self.previous_alarm_bits = self.alarm_bits
 
+                averageIE = pressure_monitor.get_IE()
+                averagePressurePlateau = pressure_monitor.get_PressurePlateau()
+                volumelastMinute = volume_monitor.get_TidalVolume_lastMinute()
+
                 print("*"*21)
                 print("[INFO] Processing Settings", self.settings)
                 print("[INFO] BPM = {}".format(breathing_cycle_per_minute))
@@ -786,6 +853,9 @@ class DatabaseProcessing:
                 print("[INFO - OK] # peak volume not in allowed range = {}".format(nbr_volume_AT_BT))
                 print("[INFO] Max volume  during last breathing cycle= {}".format(deviate_volume_list))
                 print("[INFO] # volume not near zero at ebc = {} ".format(nbr_volome_not_near_zero_ebc))
+                print("[INFO] the average IE = {} ".format(averageIE))
+                print("[INFO] the average PressurePlateau = {} ".format(averagePressurePlateau))
+                print("[INFO] the average PressurePlateau = {} ".format(volumelastMinute))
                 print("*"*21)
                 print("alarm_bits ", hex(self.alarm_bits))
 
