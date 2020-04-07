@@ -22,6 +22,8 @@ Settings definition for ventilator
 
 alarm ="ALARM"
 ack ="ACK"
+log ="log"
+setting ="setting"
 
 measurements = ['BPM',  # Breaths per minute
                 'VOL',  # Volume

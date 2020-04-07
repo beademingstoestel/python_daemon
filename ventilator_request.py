@@ -33,6 +33,7 @@ class APIRequest():
 
             if not data["result"]:
                 print("The request was not successful")
+
         except requests.RequestException:
             print("Couldn't reach the server")
 

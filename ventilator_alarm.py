@@ -21,7 +21,7 @@ import queue
 import time
 import ventilator_protocol as proto
 from enum import Enum
-
+import ventilator_log as log
 
 # BT: Below Threshold
 # AT Above Threshold
@@ -75,6 +75,7 @@ class AlarmHandler():
 
     def run(self, name):
         print("Starting {}".format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
         self.start_time = time.time()
         while True:
             cur_time = time.time()
