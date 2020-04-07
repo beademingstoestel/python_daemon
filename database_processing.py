@@ -52,25 +52,27 @@ class PressureMonitor:
     def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
-        self.pvalues, self.timestamp, self.tpres = [], [], []
+        self.pvalues, self.timestamp, self.tpres, self.timetpres = [], [], [], []
         # send back data raw format + time stamp
         for x in (raw_data):
             self.pvalues.append(float(x.get('value')))
-            full_time = x.get('loggedAt')
-            #tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
-            #    full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
+            full_time = x.get('loggedAt')            
             self.timestamp.append(full_time.timestamp() * 1000)
-            #self.timestamp.append(tmp)
+            
         # load the TPRES signal data 
         for x in (data_TPRES):
             self.tpres.append(float(x.get('value')))
+            full_time = x.get('loggedAt')            
+            self.timetpres.append(full_time.timestamp() * 1000)
 
         # reverse the order of the element because they are retrieved 
         # in reverse order from the Mongo database
         self.timestamp.reverse()
         self.pvalues.reverse()
         self.tpres.reverse()
+        self.timetpres.reverse()
         
+        """
         # median filter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
         pvalues_filtered = signal.medfilt(self.pvalues, median_kernel_size)
@@ -86,7 +88,8 @@ class PressureMonitor:
         self.ppeaks = self.find_peaks_signal(d_pressure, +1, h=100, d=50)
         # get the location of falling edge
         self.npeaks = self.find_peaks_signal(d_pressure, -1, h=100, d=50)
-
+        """
+        
         # find the peaks using the TPRES signal 
         self.ppeaks, self.npeaks = [], []
         y = np.array(self.tpres)
@@ -103,6 +106,7 @@ class PressureMonitor:
         self.ppeaks = np.array(self.ppeaks)
         self.npeaks = np.array(self.npeaks)
         
+        
         # keep only complete breathing cycles
         # should start with peak_positive and end with one as well
         try:
@@ -114,7 +118,7 @@ class PressureMonitor:
             self.npeaks = self.npeaks[self.npeaks < end_pp]
             
         except:
-            raise Exception('pressure no valid data or peaks detected')
+            raise Exception('PRESSURE no valid data or peaks detected')
 
     def get_nbr_bpm(self):
         """
@@ -128,15 +132,17 @@ class PressureMonitor:
         number_of_breathing_cycle = len(self.ppeaks) - 1
         print("[INFO] The number of breathing cycle = {}".format(number_of_breathing_cycle))
         # time of all the breathing cycles loaded from the mongo database (seconds)
-        dtime_all_breathing_cycle =  np.diff(np.array(self.timestamp)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[self.ppeaks]) * 1e-3
+        dtime_all_breathing_cycle =  np.diff(np.array(self.timetpres)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[self.ppeaks]) * 1e-3
         print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".format(dtime_all_breathing_cycle))
-        print(np.array(self.timestamp)[self.ppeaks.astype(int)])            
+        print(np.array(self.timetpres)[self.ppeaks.astype(int)])            
         # average time of the last # breathing cycle (Ti + Te)
         average_dtime_breathing_cycle = np.mean(dtime_all_breathing_cycle)
         print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(average_dtime_breathing_cycle))
         # compute the BPM from the data analyzed
-        total_time_seconds = (self.timestamp[self.ppeaks[-1]] - self.timestamp[self.ppeaks[0]]) / 1e3
+        total_time_seconds = (self.timetpres[self.ppeaks[-1]] - self.timetpres[self.ppeaks[0]]) / 1e3
         breathing_cycle_per_minute = 60 * number_of_breathing_cycle / total_time_seconds
+        # last breathing cyvle only
+        breathing_cycle_per_minute = 60 * 1 / dtime_all_breathing_cycle[-1]
         #  send back the following values!
         return breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle
 
@@ -210,6 +216,58 @@ class PressureMonitor:
         Returns:
             TODO add return value explanation
         """
+        # find all the peaks of the loaded breathing cycles
+        end_last_bc   = self.ppeaks[-1] 
+        start_last_bc = self.ppeaks[-2]         
+        start_time_bc = self.timetpres[start_last_bc]
+        end_time_bc   = self.timetpres[end_last_bc]
+        
+        exhal_k_bc    = self.npeaks[-1]
+
+        k1 = np.argwhere(np.array(self.timestamp) > start_time_bc)
+        k1 = k1[0][0]
+        k2 = np.argwhere(np.array(self.timestamp) < end_time_bc)
+        k2 = k2[-1][0]
+        tmp = np.array(self.pvalues)
+        exhale_val_pressure = tmp[exhal_k_bc:k2]
+        tmp = np.array(self.timestamp)
+        time_exhale_val_pressure = tmp[exhal_k_bc:k2]
+        
+        p_0200 = exhale_val_pressure[-5]
+        t_0200 = time_exhale_val_pressure[-5]
+        p_0250 = exhale_val_pressure[-6]
+        t_0250 = time_exhale_val_pressure[-6]
+
+        """
+        for ktime in range(0,len(time_exhale_val_pressure)-1):
+            if abs(time_exhale_val_pressure[-1]-time_exhale_val_pressure[ktime]-250)<50:
+                p_0250 = exhale_val_pressure[ktime]
+                t_0250 = time_exhale_val_pressure[ktime]
+                break
+            else:
+                p_0250 = exhale_val_pressure[-6]
+                t_0250 = time_exhale_val_pressure[-6]
+
+        for ktime in range(0,len(time_exhale_val_pressure)-1):
+            if abs(time_exhale_val_pressure[-1]-time_exhale_val_pressure[ktime]-200)<50:
+                p_0200 = exhale_val_pressure[ktime]
+                t_0200 = time_exhale_val_pressure[ktime]
+                break
+            else:
+                p_0200 = exhale_val_pressure[-5]
+                t_0200 = time_exhale_val_pressure[-5]
+        """
+        
+        if abs(p_0200-peep_value) < threshold_dp_peep:
+            nbr_dp_peep_above_threshold = 10
+            below_peep_list = p_0200
+        elif ( abs((p_0200-p_0250) / (t_0200-t_0250)) > abs((p_0200-exhale_val_pressure[-1])/(p_0200-time_exhale_val_pressure[-1])) ):
+            nbr_dp_peep_above_threshold = 20
+            below_peep_list = p_0250
+        else:
+            nbr_dp_peep_above_threshold = 0 
+            below_peep_list = p_0200
+        """
         below_peep_list = []
         for indice_bc in self.ppeaks[1:]:
             dp = np.array(self.pvalues[indice_bc - nbr_data_point:indice_bc]) - peep_value
@@ -217,7 +275,7 @@ class PressureMonitor:
             below_peep_list.append(abs(min(dp)))
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_dp_peep_above_threshold = sum(float(num) >= threshold_dp_peep for num in below_peep_list)
-        # return
+        """
         return nbr_dp_peep_above_threshold, below_peep_list
 
     def pressure_peak_overshoot(self, pressure_desired=51, threshold_dp_overshoot=3, nbr_data_point=10):
@@ -255,6 +313,45 @@ class PressureMonitor:
             TODO add return value explanation
         """
         # find all the peaks of the loaded breathing cycles
+        end_last_bc   = self.ppeaks[-1] 
+        start_last_bc = self.ppeaks[-2]         
+        start_time_bc = self.timetpres[start_last_bc]
+        end_time_bc   = self.timetpres[end_last_bc]
+        
+        """
+        values = abs(np.array(self.timestamp)-start_time_bc)        
+        k1 = values.index(min(values))
+        values = abs(np.array(self.timestamp)-end_time_bc)
+        k2 = values.index(min(values))
+        """
+        k1 = np.argwhere(np.array(self.timestamp) > start_time_bc)
+        k1 = k1[0][0]
+        k2 = np.argwhere(np.array(self.timestamp) < end_time_bc)
+        k2 = k2[-1][0]
+        print("*"*42)
+        print(k1,k2)
+        tmp = np.array(self.pvalues)
+        val_max_pressure = max(tmp[k1:k2])
+        
+        
+        values = tmp[k1:k2]
+        exhal_k_bc    = self.npeaks[-1]
+        k_max = np.argwhere(values == val_max_pressure)+k1
+        k_max = k_max[0][0]
+        pval_min_inhale_time = min(tmp[k_max:exhal_k_bc])
+        
+        print("*"*42)
+        print(val_max_pressure)
+        
+        if abs(val_max_pressure-pressure_desired)<threshold_dp and abs(pval_min_inhale_time-pressure_desired)<threshold_dp:
+            nbr_pressure_deviate   = 0
+            dpressure_deviate_list = val_max_pressure
+        else:
+            nbr_pressure_deviate   = 10
+            dpressure_deviate_list = (val_max_pressure, pval_min_inhale_time)
+        
+        
+        """
         ind_max_pressure = self.find_peaks_signal(self.pvalues, 1, h=pressure_desired-threshold_dp, d=50)
         if len(ind_max_pressure)==0:
             # No peak was found in the data loaded -->> rise an alarm !!!
@@ -264,6 +361,8 @@ class PressureMonitor:
             dpressure_deviate_list = abs(np.array(self.pvalues)[ind_max_pressure.astype(int)]-pressure_desired)
             # nbr of time inhale or exhale duration is above the the threshold dt
             nbr_pressure_deviate = sum(float(num) >= threshold_dp for num in dpressure_deviate_list)
+        """
+        
         # return
         return nbr_pressure_deviate, dpressure_deviate_list
 
@@ -288,26 +387,27 @@ class VolumeMonitor:
     def __init__(self, raw_data, data_TPRES, median_kernel_size=11):
         super().__init__()
         # raw_data from the Mongo database
-        self.vvalues, self.timestamp, self.tpres = [], [], []
+        self.vvalues, self.timestamp, self.tpres, self.timetpres = [], [], [], []
         # send back data raw format + time stamp
         for x in (raw_data):
             self.vvalues.append(float(x.get('value')))
-            full_time = x.get('loggedAt')
-            tmp = (float(full_time.time().hour) * 3600 + float(full_time.time().minute) * 60 + float(
-                full_time.time().second)) * 1e3 + float(full_time.time().microsecond) / 1e3
-            # self.timestamp.append(full_time.timestamp() * 1000)
-            self.timestamp.append(tmp)
+            full_time = x.get('loggedAt')            
+            self.timestamp.append(full_time.timestamp() * 1000)            
         
         # load the TPRES signal data 
         for x in (data_TPRES):
             self.tpres.append(float(x.get('value')))
+            full_time = x.get('loggedAt')            
+            self.timetpres.append(full_time.timestamp() * 1000)
 
         # reverse the order of the element because they are retrieved 
         # in reverse order from the Mongo database
         self.timestamp.reverse()
         self.vvalues.reverse()
         self.tpres.reverse()
-               
+        self.timetpres.reverse()
+        
+        """
         # median fileter size = median_kernel_size
         # https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.medfilt.html
         vvalues_filtered = signal.medfilt(self.vvalues, median_kernel_size)
@@ -323,6 +423,7 @@ class VolumeMonitor:
         self.ppeaks = self.find_peaks_signal(d_volume, +1, h=100, d=50)
         # get the location of falling edge
         self.npeaks = self.find_peaks_signal(d_volume, -1, h=100, d=50)
+        """
         
         # find the peaks using the TPRES signal 
         self.ppeaks, self.npeaks = [], []
@@ -362,6 +463,35 @@ class VolumeMonitor:
             TODO add return value explanation
         """
         # find all the peaks of the loaded breathing cycles
+        end_last_bc   = self.ppeaks[-1] 
+        start_last_bc = self.ppeaks[-2]         
+        start_time_bc = self.timetpres[start_last_bc]
+        end_time_bc   = self.timetpres[end_last_bc]
+        
+        k1 = np.argwhere(np.array(self.timestamp) > start_time_bc)
+        k1 = k1[0][0]
+        k2 = np.argwhere(np.array(self.timestamp) < end_time_bc)
+        k2 = k2[-1][0]
+        tmp = np.array(self.vvalues)
+        val_max_volume = max(tmp[k1:k2])
+        
+        if abs(val_max_volume-volume_desired)<threshold_dv:
+            nbr_volume_deviate   = 0
+            dvolume_deviate_list = val_max_volume
+        else:
+            nbr_volume_deviate   = 10
+            dvolume_deviate_list = val_max_volume
+        
+        
+        """
+        dvolume_deviate_list = []
+        for k in range(0,len(self.ppeaks)-1):
+            max_vol = max(self.vvalues[self.ppeaks[k]:self.ppeaks[k+1]])
+            dvolume_deviate_list.append(abs(max_vol-volume_desired))
+        nbr_volume_deviate = sum(float(num) > threshold_dv for num in dvolume_deviate_list)
+        """
+        """
+        # find all the peaks of the loaded breathing cycles
         ind_max_volume = self.find_peaks_signal(self.vvalues, 1, h=volume_desired-threshold_dv, d=50)
         if len(ind_max_volume)==0:
             # No peak was found in the data loaded -->> rise an alarm !!!
@@ -371,10 +501,10 @@ class VolumeMonitor:
             dvolume_deviate_list = abs(np.array(self.vvalues)[ind_max_volume.astype(int)]-volume_desired)
             # nbr of time inhale or exhale duration is above the the threshold dt
             nbr_volume_deviate = sum(float(num) >= threshold_dv for num in dvolume_deviate_list)
-        # return
+        """
         return nbr_volume_deviate, dvolume_deviate_list
 
-    def detect_volume_not_near_zero_ebc(self, threshold_dv_zero=5, nbr_data_point=35):
+    def detect_volume_not_near_zero_ebc(self, threshold_dv_zero=50, nbr_data_point=10):
         """
         function to check volume near 0 ==>> at the end of every cycle
         Args:
@@ -384,13 +514,37 @@ class VolumeMonitor:
         Returns:
             TODO add return value explanation
         """
+        # find all the peaks of the loaded breathing cycles
+        # TODO test 
+        end_last_bc   = self.ppeaks[-1] 
+        start_last_bc = self.ppeaks[-2]         
+        start_time_bc = self.timetpres[start_last_bc]
+        end_time_bc   = self.timetpres[end_last_bc]
+
+        exhal_k_bc    = self.npeaks[-1]
+
+
+        k1 = np.argwhere(np.array(self.timestamp) > start_time_bc)
+        k1 = k1[0][0]
+        k2 = np.argwhere(np.array(self.timestamp) < end_time_bc)
+        k2 = k2[-1][0]
+        tmp = np.array(self.vvalues)
+        val_min_volume = abs(min(tmp[exhal_k_bc:k2]))
+
+        if val_min_volume < threshold_dv_zero:
+            nbr_volome_not_near_zero_ebc = 0
+            volume_near_zero_list = val_min_volume
+        else:
+            nbr_volome_not_near_zero_ebc = 10
+            volume_near_zero_list = val_min_volume
+        """
         volume_near_zero_list = []
         for indice_bc in self.ppeaks[1:]:
-            min_volume = min(self.vvalues[indice_bc - nbr_data_point:indice_bc])
+            min_volume = abs(min(self.vvalues[indice_bc - nbr_data_point:indice_bc]))
             volume_near_zero_list.append(min_volume)
         # nbr of time inhale or exhale duration is above the the threshold dt
         nbr_volome_not_near_zero_ebc = sum(float(num) >= threshold_dv_zero for num in volume_near_zero_list)
-        # return
+        """
         return nbr_volome_not_near_zero_ebc, volume_near_zero_list
 
     def find_peaks_signal(self, signal_x, sign=1, h=100, d=50):
@@ -414,9 +568,11 @@ class DatabaseProcessing:
         self.addr = addr
         self.alarm_queue = alarm_queue
         self.alarm_bits = AlarmBits.NONE.value
+        self.previous_alarm_bits = AlarmBits.NONE.value
         self.db = None
+        self.previous_mute_setting = 0
 
-    def last_n_data(self, type_data, N=2000):
+    def last_n_data(self, type_data, N=1000):
         """
         retrieve the last "N" added measurement N = 1000
 
@@ -477,11 +633,20 @@ class DatabaseProcessing:
         self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
 
         # TODO add a playing sound when a warning is valide !!!!
-
+        
+        # debug feature
+        self.alarm_bits = AlarmBits.NONE.value
+        cycle_counter = 0
+        
         while True:
             try:
-                self.alarm_bits = AlarmBits.NONE.value
-
+                # debug alarm
+                if cycle_counter == 100:
+                        self.alarm_bits = AlarmBits.NONE.value
+                cycle_counter = cycle_counter + 1                
+                
+                # self.alarm_bits = AlarmBits.NONE.value
+                
                 data_p, data_TPRES = self.last_n_data('PRES')
                 pressure_monitor = PressureMonitor(data_p, data_TPRES)
                 data_v, data_TPRES = self.last_n_data('VOL')
@@ -492,28 +657,30 @@ class DatabaseProcessing:
 
                 # BPM - # Respiratory rate (RR)
                 breathing_cycle_per_minute, number_of_breathing_cycle, average_dtime_breathing_cycle = pressure_monitor.get_nbr_bpm()
-                if breathing_cycle_per_minute < self.settings['RR']:
+                if abs(breathing_cycle_per_minute-self.settings['RR']) > 0.50 :
                     print("[WARNING] Breathing at {} per minute".format(breathing_cycle_per_minute))
                     self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_BPM_BT.value
-
+                
+                
                 # performance 'IE',   # Inspiration/Expiration (N for 1/N)
                 # in the function definition used as default values 2.75 / 10 seconds
                 nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT = pressure_monitor.analyze_inhale_exhale_time(threshold_ratio_ie=self.settings['IE'],
                                                                                                             threshold_dt_ie=10)
-                if nbr_ie_ratio_BT > 0:
+                if False: # nbr_ie_ratio_BT > 0:
                     print("[WARNING] # Respiratory rate below threshold : {} ".format(nbr_ie_ratio_BT))
                     self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_IE_RATIO_BT.value
 
-                if nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
+                if False: # nbr_dtinhale_AT > 0 or nbr_dtexhale_AT > 0:
                     print("[WARNING] # inhale time above 10s : {} and # exhale time above 10s :{} ".format(nbr_dtinhale_AT, nbr_dtexhale_AT))
                     self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_TIME_INHALE_EXHALE_AT.value
+                
 
                 # Pressure performance Tracking -- Peak Pressure PK and ADPK Allowed deviation Peak Pressure
                 # in the function defaults values are 51 / 3 / (5 for data points)
                 nbr_dp_AT, dp_list = pressure_monitor.check_pressure_tracking_performance(pressure_desired=self.settings['PK'],
                                                                         threshold_dp=self.settings['ADPK'],
                                                                         nbr_data_point=5)
-                if nbr_dp_AT > 3:
+                if False: # nbr_dp_AT > 3:
                     print("[WARNING] # Pressure deviate during inhale {}".format(nbr_dp_AT))
                     self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_DP_AT.value
 
@@ -522,7 +689,7 @@ class DatabaseProcessing:
                 nbr_dp_peep_AT, below_peep_list = pressure_monitor.detect_pressure_below_peep(peep_value=self.settings['PP'],
                                                                                             threshold_dp_peep=self.settings['ADPP'],
                                                                                             nbr_data_point=35)
-                if nbr_dp_peep_AT > 0:
+                if False: # nbr_dp_peep_AT > 0:
                     print("[WARNING] # Pressure below peep level detected {}".format(nbr_dp_peep_AT))
                     self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_PRESSURE_DP_PEEP_AT.value
                     
@@ -559,7 +726,7 @@ class DatabaseProcessing:
 
                 # function to check volume near 0 ==>> at the end of every cycle
                 # TODO do we have in the settings a value for the threshold_dv_zero? if we need to find value 0 set then the threshold to 0
-                nbr_volome_not_near_zero_ebc, volume_near_zero_list = volume_monitor.detect_volume_not_near_zero_ebc(threshold_dv_zero=5, 
+                nbr_volome_not_near_zero_ebc, volume_near_zero_list = volume_monitor.detect_volume_not_near_zero_ebc(threshold_dv_zero=50, 
                                                                                                                     nbr_data_point=35)
                 if nbr_volome_not_near_zero_ebc > 0:
                     print("[WARNING] Volume not near zero at the end of breathing cycle {}".format(nbr_volome_not_near_zero_ebc))
@@ -568,25 +735,49 @@ class DatabaseProcessing:
                 if self.alarm_bits > 0:
                     self.alarm_queue.put({'type': proto.alarm, 'val': self.alarm_bits, 'source': 'processing'})
                     #play an alarm
-                    if self.settings['MT']:
-                        print('play beep')
+                    print('play beep')
+                    if self.previous_alarm_bits == 0:
                         if self.sound_player.is_alive():
                             self.sound_player.terminate()
                             self.sound_player.join()
-
-                        self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
+                        self.sound_player = SoundPlayer('assets/beep.wav', -1, 0.200)
                         self.sound_player.start()
+                elif self.alarm_bits == 0 and self.previous_alarm_bits != 0:
+                    print('stop beep')
+                    if self.sound_player.is_alive():
+                        self.sound_player.terminate()
+                        self.sound_player.join()
+                
+                if self.settings['MT'] == 0 and self.previous_mute_setting != 0:
+                    print('play beep MT')
+                    if self.alarm_bits > 0:
+                        if self.sound_player.is_alive():
+                            self.sound_player.terminate()
+                            self.sound_player.join()
+                        self.sound_player = SoundPlayer('assets/beep.wav', -1, 0.200)
+                        self.sound_player.start()
+                elif self.settings['MT'] == 1 and self.previous_mute_setting == 0:
+                    print('stop beep MT')
+                    if self.sound_player.is_alive():
+                        self.sound_player.terminate()
+                        self.sound_player.join()
+                    
+                self.previous_mute_setting = self.settings['MT']
+                self.previous_alarm_bits = self.alarm_bits
 
                 print("*"*21)
                 print("[INFO] Processing Settings", self.settings)
-                print("[INFO] BPM = {}".format(breathing_cycle_per_minute,))
-                print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
+                print("[INFO - OK] BPM = {}".format(breathing_cycle_per_minute,))
+                # print("[INFO] # IE_ratio_BT = {}, # dt_inhale_AT = {}, # dt_exhale_AT = {}  ".format(nbr_ie_ratio_BT, nbr_dtinhale_AT, nbr_dtexhale_AT))
                 print("[INFO] # pressure desired not reached {}".format(nbr_dp_AT))
                 print("[INFO] # pressure below peep+dp = {} ".format(nbr_dp_peep_AT))
-                print("[INFO] # peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
-                print("[INFO] # peak volume not in allowed range = {}".format(nbr_volume_AT_BT))
+                print("[INFO - OK] # peak pressure not in allowed range = {}".format(nbr_pressure_AT_BT))
+                print("[INFO] Max pressure and min pressure during inhale time = {}".format(deviate_pressure_list)) # TODO to change the name
+                print("[INFO - OK] # peak volume not in allowed range = {}".format(nbr_volume_AT_BT))
+                print("[INFO] Max volume  during last breathing cycle= {}".format(deviate_volume_list))
                 print("[INFO] # volume not near zero at ebc = {} ".format(nbr_volome_not_near_zero_ebc))
                 print("*"*21)
+                print("alarm_bits ", hex(self.alarm_bits))
 
             except Exception as inst:
                 print("[INFO] Processing Settings", self.settings)
