@@ -26,7 +26,7 @@ import ventilator_protocol as proto
 import time
 import traceback
 from datetime import datetime
-
+import ventilator_log as log
 
 class SerialHandler():
 
@@ -64,6 +64,8 @@ class SerialHandler():
         self.ser.reset_output_buffer()
 
         print("Starting {}".format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
+
         while True:
             try:
                 msg = self.out_queue.get(block=False)
@@ -88,6 +90,7 @@ class SerialHandler():
                     self.ser.write(msg_bytes)
                 except:
                     print("Unable to send line ", msg_bytes)
+                    log.ERROR(__name__, self.request_queue, "Unable to send line ", msg_bytes)
                     self.attempt_reconnection()
 
             line = ""
@@ -144,6 +147,7 @@ class SerialHandler():
                         self.ser.write(msg_ack_bytes)
                     except:
                         print("Unable to send line ", msg_ack_bytes)
+                        log.ERROR(__name__, self.request_queue, "Unable to send line ", msg_ack_bytes)
 
 
                 # handle measurements
@@ -170,6 +174,7 @@ class SerialHandler():
                                 self.ser.write(msg_ack_bytes)
                             except:
                                 print("Unable to send line ", msg_ack_bytes)
+                                log.ERROR(__name__, self.request_queue, "Unable to send line ", msg_ack_bytes)
 
 
                 for msgtype in proto.internal_settings:
@@ -192,6 +197,8 @@ class SerialHandler():
 
             except Exception as e:
                 print(e)
+                log.ERROR(__name__, self.request_queue, "Exception occurred = {}".format(e))
                 traceback.print_exc()
+
 
 

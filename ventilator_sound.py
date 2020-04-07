@@ -21,6 +21,7 @@ import time
 from threading import Thread
 import sounddevice as sd
 import soundfile as sf
+import ventilator_log as log
 
 class SoundPlayer(Thread):
 
@@ -51,7 +52,7 @@ class SoundPlayer(Thread):
                 status = sd.wait()
                 if status:
                     print('Error during playback: ' + str(status))
-            except:
-                pass
+            except Exception as e:
+                print('Exception occurred during playback {}'.format(e))
             self.repeat_cnt += 1
             time.sleep(self.sleep_duration)

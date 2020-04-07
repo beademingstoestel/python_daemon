@@ -22,14 +22,15 @@ Ventilator database connection
 import queue
 from datetime import datetime
 from pymongo import MongoClient, errors
-
+import ventilator_log as log
 
 class DbClient():
 
-    def __init__(self, db_queue, addr='mongodb://localhost:27017'):
+    def __init__(self, db_queue, request_queue, addr='mongodb://localhost:27017'):
         self.addr = addr
         self.db = None
         self.queue = db_queue
+        self.request_queue = request_queue
 
     def store_pressure(self, msg):
         collection = self.db.pressure_values
@@ -69,6 +70,7 @@ class DbClient():
 
     def run(self, name):
         print("Starting {}".format(name))
+        log.INFO(__name__, self.request_queue, "Starting {}".format(name))
 
         # Only start MongoClient after fork()
         # and each child process should have its own instance of the client
@@ -76,6 +78,7 @@ class DbClient():
             self.client = MongoClient(self.addr)
         except errors.ConnectionFailure:
             print("Unable to connect, client will attempt to reconnect")
+            log.ERROR(__name__, self.request_queue, "Unable to connect, client will attempt to reconnect")
 
         self.db = self.client.beademing
 
@@ -99,5 +102,8 @@ class DbClient():
                     self.store_flow(msg)
                 elif msg['type'] == 'CPU':
                     self.store_cpu(msg)
-            except:
-                print("Invalid message from database")
+            except Exception as e:
+                print("Invalid message from database = {}".format(msg))
+                log.ERROR(__name__, self.request_queue, "Invalid message from database = {}".format(msg))
+                print(e)
+                log.ERROR(__name__, self.request_queue, "Exception occurred {}".format(e))
