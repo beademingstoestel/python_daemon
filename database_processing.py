@@ -128,7 +128,7 @@ class PressureMonitor:
         # extract the dt for inhale and exhale
         dtime_inhale = dtime_inhale_exhale[0::2]
         dtime_exhale = dtime_inhale_exhale[1::2]
-        nbr_ele = min(len(dtime_inhale), len(dtime_exhale))
+        nbr_ele = min(3, len(dtime_inhale), len(dtime_exhale))
         dtime_inhale = dtime_inhale[:nbr_ele]
         dtime_exhale = dtime_exhale[:nbr_ele]
         # compute the ratio exhale/inhale ~ 3 
@@ -283,7 +283,7 @@ class PressureMonitor:
         dtime_inhale = dtime_inhale_exhale[0::2]  
         dtime_exhale = dtime_inhale_exhale[1::2]
         # full number of cycles present in data record (in case of incomplete cycles)
-        nbr_ele = min(len(dtime_inhale), len(dtime_exhale))
+        nbr_ele = min(3, len(dtime_inhale), len(dtime_exhale))
         dtime_inhale = dtime_inhale[:nbr_ele]
         dtime_exhale = dtime_exhale[:nbr_ele]
         # compute the ratio exhale/inhale (this are still multiple values) 
