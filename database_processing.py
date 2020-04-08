@@ -124,7 +124,7 @@ class PressureMonitor:
         # combine both list of peaks to measure the Ti and Te
         all_peaks = np.concatenate((self.ppeaks, self.npeaks), axis=0)
         all_peaks = np.sort(all_peaks)
-        dtime_inhale_exhale = np.diff(np.array(self.timestamp)[all_peaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[all_peaks]) * 1e-3
+        dtime_inhale_exhale = np.diff(np.array(self.timetpres)[all_peaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[all_peaks]) * 1e-3
         # extract the dt for inhale and exhale
         dtime_inhale = dtime_inhale_exhale[0::2]
         dtime_exhale = dtime_inhale_exhale[1::2]
