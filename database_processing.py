@@ -79,10 +79,14 @@ class PressureMonitor:
             elif y[k]>0 and y[k+1]==0:
                 self.npeaks.append(k)
         
-        print("PRESSURE"*3)
-        print(max(y))
-        print(self.ppeaks)
-        print(self.npeaks)
+        #print("PRESSURE"*3)
+        #print(max(y))
+        #print(self.ppeaks)
+        #print(self.npeaks)
+
+        log.INFO(__name__, self.request_queue, "self.ppeaks {}".format(self.ppeaks))
+        log.INFO(__name__, self.request_queue, "self.npeaks {}".format(self.npeaks))
+
         self.ppeaks = np.array(self.ppeaks)
         self.npeaks = np.array(self.npeaks)
         
@@ -114,7 +118,7 @@ class PressureMonitor:
         # time of all the breathing cycles loaded from the mongo database (seconds)
         dtime_all_breathing_cycle =  np.diff(np.array(self.timetpres)[self.ppeaks.astype(int)]) * 1e-3 # np.diff(self.timestamp[self.ppeaks]) * 1e-3
         print("[INFO] Time (in seconds) of all the breathing cycles loaded from the mongo database: {}".format(dtime_all_breathing_cycle))
-        print(np.array(self.timetpres)[self.ppeaks.astype(int)])            
+        #print(np.array(self.timetpres)[self.ppeaks.astype(int)])            
         # average time of the last # breathing cycle (Ti + Te)
         average_dtime_breathing_cycle = np.mean(dtime_all_breathing_cycle)
         print("[INFO] Average time of the last # breathing cycle (Ti + Te) = {} seconds".format(average_dtime_breathing_cycle))
@@ -473,10 +477,10 @@ class VolumeMonitor:
             elif y[k]>0 and y[k+1]==0:
                 self.npeaks.append(k)
         
-        print("VOLUME"*3)
+        #print("VOLUME"*3)
         # print(max(y))
-        print(self.ppeaks)
-        print(self.npeaks)
+        #print(self.ppeaks)
+        #print(self.npeaks)
         
         self.ppeaks = np.array(self.ppeaks)
         self.npeaks = np.array(self.npeaks)
@@ -639,6 +643,7 @@ class DatabaseProcessing:
         self.previous_alarm_bits = AlarmBits.NONE.value
         self.db = None
         self.previous_mute_setting = 0
+        self.counter = 0
 
     def last_n_data(self, type_data, N=1200):
         """
@@ -713,6 +718,11 @@ class DatabaseProcessing:
         
         while True:
             try:
+                if (self.counter % 1) == 0:
+                    begin = int(round(time.time() * 1000))
+                    print("processing time {}".format(begin))
+                    log.INFO(__name__, self.request_queue, "processing counter {} time {}".format(self.counter, begin))
+                self.counter = self.counter + 1
                 # debug alarm
                 if cycle_counter == 100:
                         self.alarm_bits = AlarmBits.NONE.value
@@ -869,6 +879,7 @@ class DatabaseProcessing:
 
             except Exception as e:
                 print("[INFO] Processing Settings", self.settings)
+                log.INFO(__name__, self.request_queue, "Processing Settings = {}".format(self.settings))
                 print('[WARNING] Exception occurred: ', e)
                 log.ERROR(__name__, self.request_queue, "Exception occurred = {}".format(e))
                 self.alarm_bits = self.alarm_bits | AlarmBits.DATABASE_PROCESSING_EXCEPTION.value

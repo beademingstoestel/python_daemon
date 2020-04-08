@@ -31,11 +31,36 @@ class SettingHandler:
         self.serial_queue = serial_queue
         self.settings = settings
         self.request_queue = request_queue
+        self.counter = 0
+
+        #add default settings for testing only: don't commit
+
+        self.settings['RR'] = 0.0  # Respiratory rate
+        self.settings['VT'] = 0.0  # Tidal Volume
+        self.settings['PK'] = 0.0  # Peak Pressure
+        self.settings['TS'] = 0.0  # Breath Trigger Threshold
+        self.settings['IE'] = 0.0  # Inspiration/Expiration (N for 1/N)
+        self.settings['PP'] = 0.0  # PEEP (positive end expiratory pressure)
+        self.settings['ADPK'] = 0.0  # Allowed deviation Peak Pressure
+        self.settings['ADVT'] = 0.0  # Allowed deviation Tidal Volume
+        self.settings['ADPP'] = 0.0  # Allowed deviation PEEP
+        self.settings['MODE'] = 0.0  # Machine Mode (Volume Control / Pressure Control)
+        self.settings['ACTIVE'] = 0.0  # Machine on / off
+        self.settings['PS'] = 0.0  # support pressure
+        self.settings['RP'] = 0.0  # ramp time
+        self.settings['TP'] = 0.0  # trigger pressure
+        self.settings['MT'] = 0.0  # mute
+        self.settings['FW'] = 0.0  # firmware version
 
     def run(self, name):
         print('Starting {}'.format(name))
         log.INFO(__name__, self.request_queue, "Starting {}".format(name))
         while True:
+            if (self.counter % 100) == 0:
+                begin = int(round(time.time() * 1000))
+                print("settings time {}".format(begin))
+                log.INFO(__name__, self.request_queue, "settings counter {} time {}".format(self.counter, begin))
+            self.counter = self.counter + 1
             try:
                 msg = self.serial_queue.get(block=False)
             except queue.Empty:

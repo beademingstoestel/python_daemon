@@ -26,12 +26,19 @@ class RequestHandler:
     def __init__(self, api_client, request_queue):
         self.request_queue = request_queue
         self.api_client = api_client
+        self.counter = 0
 
 
     def run(self, name):
         print('Starting {}'.format(name))
         self.api_client.send_log(log.LOG_LEVEL_INFO, '{} - Starting {}'.format(__name__, name))
         while True:
+            if (self.counter % 100) == 0:
+                begin = int(round(time.time() * 1000))
+                print("request handler time {}".format(begin))
+                log.INFO(__name__, self.request_queue, "request handler counter {} time {}".format(self.counter, begin))
+            self.counter = self.counter + 1
+
             try:
                 msg = self.request_queue.get(block=False)
             except queue.Empty:

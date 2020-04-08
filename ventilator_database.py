@@ -23,6 +23,7 @@ import queue
 from datetime import datetime
 from pymongo import MongoClient, errors
 import ventilator_log as log
+import time
 
 class DbClient():
 
@@ -31,6 +32,7 @@ class DbClient():
         self.db = None
         self.queue = db_queue
         self.request_queue = request_queue
+        self.counter = 0
 
     def store_pressure(self, msg):
         collection = self.db.pressure_values
@@ -83,27 +85,34 @@ class DbClient():
         self.db = self.client.beademing
 
         while True:
+            if (self.counter % 100) == 0:
+                begin = int(round(time.time() * 1000))
+                print("database time {}".format(begin))
+                log.INFO(__name__, self.request_queue, "database counter {} time {}".format(self.counter, begin))
+            self.counter = self.counter + 1
+
             try:
                 msg = self.queue.get()
             except queue.Empty:
-                continue
-            try:
-                if msg['type'] == 'BPM':
-                    self.store_bpm(msg)
-                elif msg['type'] == 'VOL':
-                    self.store_volume(msg)
-                elif msg['type'] == 'TRIG':
-                    self.store_trigger(msg)
-                elif msg['type'] == 'PRES':
-                    self.store_pressure(msg)
-                elif msg['type'] == 'TPRES':
-                    self.store_target_pressure(msg)
-                elif msg['type'] == 'FLOW':
-                    self.store_flow(msg)
-                elif msg['type'] == 'CPU':
-                    self.store_cpu(msg)
-            except Exception as e:
-                print("Invalid message from database = {}".format(msg))
-                log.ERROR(__name__, self.request_queue, "Invalid message from database = {}".format(msg))
-                print(e)
-                log.ERROR(__name__, self.request_queue, "Exception occurred {}".format(e))
+                msg = None
+            if msg != None:		
+                try:
+                    if msg['type'] == 'BPM':
+                        self.store_bpm(msg)
+                    elif msg['type'] == 'VOL':
+                        self.store_volume(msg)
+                    elif msg['type'] == 'TRIG':
+                        self.store_trigger(msg)
+                    elif msg['type'] == 'PRES':
+                        self.store_pressure(msg)
+                    elif msg['type'] == 'TPRES':
+                        self.store_target_pressure(msg)
+                    elif msg['type'] == 'FLOW':
+                        self.store_flow(msg)
+                    elif msg['type'] == 'CPU':
+                        self.store_cpu(msg)
+                except Exception as e:
+                    print("Invalid message from database = {}".format(msg))
+                    log.ERROR(__name__, self.request_queue, "Invalid message from database = {}".format(msg))
+                    print(e)
+                    log.ERROR(__name__, self.request_queue, "Exception occurred {}".format(e))

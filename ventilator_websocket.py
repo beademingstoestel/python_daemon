@@ -25,6 +25,7 @@ import websockets
 import ventilator_protocol as proto
 from ventilator_sound import SoundPlayer
 import ventilator_log as log
+import time
 
 class WebsocketHandler():
 
@@ -84,6 +85,11 @@ class WebsocketHandler():
         self.sound_player = SoundPlayer('assets/beep.wav', 0, 0)
 
         while True:
+            if (self.counter % 100) == 0:
+                begin = int(round(time.time() * 1000))
+                print("websocket time {}".format(begin))
+                log.INFO(__name__, self.request_queue, "websocket counter {} time {}".format(self.counter, begin))
+            self.counter = self.counter + 1
             json_msg = self.ws.recv()
             try:
                 msg = json.loads(json_msg)
@@ -115,6 +121,7 @@ class WebsocketHandler():
         self.serial_queue = serial_queue
         self.setting_queue = setting_queue
         self.request_queue = request_queue
+        self.counter = 0
 
 if __name__ == "__main__":
     ws = WebsocketHandler()

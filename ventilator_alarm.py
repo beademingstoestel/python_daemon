@@ -64,6 +64,8 @@ class AlarmHandler():
         self.request_queue = request_queue
 
         self.alarm_val = 0
+        self.alarm_val_serial = 0
+        self.alarm_val_processing = 0
 
         self.time_last_kick_sent = 0
         self.time_last_kick_received = 0
@@ -73,15 +75,22 @@ class AlarmHandler():
         self.first_watchdog_kick_received = False
         self.start_time = 0
 
+        self.counter = 0
+
     def run(self, name):
         print("Starting {}".format(name))
         log.INFO(__name__, self.request_queue, "Starting {}".format(name))
         self.start_time = time.time()
         while True:
+            if (self.counter % 10) == 0:
+                begin = int(round(time.time() * 1000))
+                print("alarm time {}".format(begin))
+                log.INFO(__name__, self.request_queue, "alarm counter {} time {}".format(self.counter, begin))
+            self.counter = self.counter + 1
             cur_time = time.time()
             # Do we need to kick the watchdog? Only after we've received the first kick
             if self.first_watchdog_kick_received and ((cur_time - self.time_last_kick_sent) > 1 ):
-                self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})
+                self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val_processing}) #TODO alarm_val or alarm_val_processing
                 self.time_last_kick_sent = cur_time
 
             try:
@@ -90,16 +99,21 @@ class AlarmHandler():
                 msg = None
 
             if msg != None:
-                print(msg)
+                print("alarm ", msg)
                 if msg['type'] == proto.alarm:
                     if msg['source'] == 'serial':
                         self.time_last_kick_received == cur_time
                         if not self.first_watchdog_kick_received:
                             self.first_watchdog_kick_received = True
+                        #self.alarm_val_serial = msg['val'] for testing
+                    #todo define serial alarm-bitmasks, serial alarm = 0 repeated ?
+                    if msg['source'] == 'processing':                        
+                        self.alarm_val_processing = msg['val']
 
                     old_alarm = self.alarm_val
-                    self.alarm_val = msg['val']
-
+                    self.alarm_val = self.alarm_val_serial | self.alarm_val_processing
+                    print("old_alarm ", hex(old_alarm))
+                    print("alarm_val ", hex(self.alarm_val))
                     # don't wait on the watchdog kick to put the alarm on the serial queue.
                     if (self.alarm_val > 0) and (old_alarm != self.alarm_val):
                         #self.serial_queue.put({'type': proto.alarm, 'val': self.alarm_val})

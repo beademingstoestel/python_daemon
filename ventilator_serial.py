@@ -39,6 +39,7 @@ class SerialHandler():
         self.out_queue = out_queue
         self.alarm_queue = alarm_queue
         self.message_id = 0
+        self.counter = 0
 
     def queue_put(self, type, val, loggedAt):
         """
@@ -49,6 +50,12 @@ class SerialHandler():
             val (int): value to be sent
         """
         self.db_queue.put({'type': type, 'val': val, 'loggedAt': loggedAt})
+
+        if (self.counter % 100) == 0:
+            begin = int(round(time.time() * 1000))
+            print("serial counter {} time {}".format(self.counter, begin))
+            log.INFO(__name__, self.request_queue, "serial counter {} time {}".format(self.counter, begin))
+        self.counter = self.counter + 1
 
     def attempt_reconnection(self):
             self.ser = None
@@ -124,12 +131,12 @@ class SerialHandler():
                           "val: {},"
                           "checksum: {}, "
                           "calculated_checksum: {}".format(key,
-                                                           int(val),
+                                                           val,
                                                            checksum,
                                                            calculated_checksum))
                     continue
 
-                print("Received message: {}".format(line))
+                #print("Received message: {}".format(line))
 
                 if line.startswith(proto.ack + '='):
                     print("Received ack for id {}".format(id))
